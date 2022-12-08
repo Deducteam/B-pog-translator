@@ -681,14 +681,14 @@ let parse_define =
      Define (n, s, p)
   | x -> parse_fail x
 
-type local_Hyp = Local_Hyp of int * pred_group
+type local_Hyp = int * pred_group
 
 let parse_local_hyp =
   function
   | Element ("Local_Hyp", args, x::_) ->
      let n = int_of_string @@ List.assoc "num" args in
      let s = parse_pred_group x in
-     Local_Hyp (n, s)
+     (n, s)
   | x -> parse_fail x
 
 (* deprecated *)

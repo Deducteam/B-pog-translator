@@ -73,7 +73,18 @@ let define2ns (Define (s,sl,pl)) =
   let pd = List.mapi (fun i x -> Def (string_of_int i ^ s', (Thm x, None))) pl in
   NS (s,List.concat [sd;pd])
 
-let po2ns (PO (s,dl,hl,lhl,gl)) = failwith "TODO"
+let sanitizename = String.map (function ' ' -> '-' | c -> c)
+
+let simple_goal2ns suffix gl ll i (Simple_Goal (s, lh, pl, _)) =
+  let s = sanitizename s in
+  let hl = List.concat [gl; List.map (fun x -> List.assoc x ll) lh] in
+  let g = Nary_Pred (And, pl) in
+  let po = List.fold_right (fun x p -> Binary_Pred (Imply, x, p)) hl g in
+  Def ((string_of_int i) ^ s ^ suffix, (U, Some (Pred po)))
+
+let po2ns i (PO (s,_,gl,ll,gol)) =
+  let suffix = "_" ^ (string_of_int i) ^ sanitizename s in
+  NS (s, List.mapi (simple_goal2ns suffix gl ll) gol)
 
 let pos2ns (POs (d, po, ti')) =
   let ti' = match ti' with
@@ -82,5 +93,5 @@ let pos2ns (POs (d, po, ti')) =
   in ti := ti';
   let d = List.map define2ns d in
   let c = free_vars2ns () in (* c should be evaluated after d, because of side-effects *)
-  print_endline "TODO po";
-  c :: d
+  let p = List.mapi po2ns po in
+  c :: List.concat [d; p]
