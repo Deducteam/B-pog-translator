@@ -1,4 +1,4 @@
-open Parser
+open Pogparser
 
 (*
 list id's, their type, definitions (if any), dependencies
@@ -15,7 +15,7 @@ let ti = ref []
 
 type expr = Pred of pred_group | Expr of exp_group
 
-type typ = T | U | Thm of pred_group | Tau of type_group
+type typ = ID | T | U | Thm of pred_group | Tau of type_group
 
 type def =
   Def of string * (typ * expr option)
@@ -52,6 +52,9 @@ let const2def (t,s,o) =
 let free_vars2ns () =
   NS ("constants", List.map const2def @@ varlist ())
 
+let strings2ns () =
+  NS ("IDs", List.map (fun x -> Def (x, (ID, None))) @@ stringlist ())
+
 let set2def (Set ((t, s, o), l)) =
   match get_type t with
   | Pow x ->
@@ -73,8 +76,6 @@ let define2ns (Define (s,sl,pl)) =
   let pd = List.mapi (fun i x -> Def (string_of_int i ^ s', (Thm x, None))) pl in
   NS (s,List.concat [sd;pd])
 
-let sanitizename = String.map (function ' ' -> '-' | c -> c)
-
 let simple_goal2ns suffix gl ll i (Simple_Goal (s, lh, pl, _)) =
   let s = sanitizename s in
   let hl = List.concat [gl; List.map (fun x -> List.assoc x ll) lh] in
@@ -92,6 +93,7 @@ let pos2ns (POs (d, po, ti')) =
     | Some (TI x) -> x
   in ti := ti';
   let d = List.map define2ns d in
+  let i = strings2ns () in
   let c = free_vars2ns () in (* c should be evaluated after d, because of side-effects *)
   let p = List.mapi po2ns po in
-  c :: List.concat [d; p]
+  i :: c :: List.concat [d; p]

@@ -1,5 +1,5 @@
 open Markup
-open Parser
+open Pogparser
 open Checker
 
 let ( >> ) f g x = g (f x)

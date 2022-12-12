@@ -2,6 +2,8 @@ type ast = Element of string * (string * string) list * ast list | Text of strin
 
 exception Bad_Ast of ast
 
+let sanitizename = String.map (function ' ' -> '-' | c -> c)
+
 let parse_fail x = raise (Bad_Ast x)
 
 let predefined_sets = ["BOOL"; "INTEGER"; "REAL"; "FLOAT"; "STRING"]
@@ -24,15 +26,19 @@ module Id =
   end
 
 module Id_Set = Set.Make(Id)
+module String_Set = Set.Make(String)
 
 let free_vars = ref (Id_Set.empty)
 let bound_vars = ref (Id_Set.empty)
+let strings = ref (String_Set.empty)
 let add_var x = if not (Id_Set.mem x !bound_vars) then free_vars := Id_Set.add x !free_vars
 let rem_var x = free_vars := Id_Set.remove x !free_vars
 let add_bound x = bound_vars := Id_Set.add x !bound_vars
 let rem_bound x = bound_vars := Id_Set.remove x !bound_vars
 let rem_list l = List.iter rem_bound l
 let varlist () = Id_Set.elements !free_vars
+let add_string x = strings := String_Set.add x !strings
+let stringlist () = String_Set.elements !strings
 
 let parse_id =
   function
@@ -490,7 +496,7 @@ and parse_exp_group =
     | Element ("Record_Item", args, [x]) ->
        let label = List.assoc "label" args in
        let c = parse_exp_group x in
-       (label, c)
+       add_string ("label?" ^ label); (label, c)
     | x -> parse_fail x
   in
   function
@@ -584,7 +590,7 @@ and parse_exp_group =
   | Element ("STRING_Literal", args, children) ->
      let typref = int_of_string @@ List.assoc "typref" args in
      let v = List.assoc "value" args in
-     STRING_Literal (typref, v)
+     add_string ("string?" ^ sanitizename v); STRING_Literal (typref, v)
   | Element ("Struct", args, children) ->
      let typref = int_of_string @@ List.assoc "typref" args in
      let c = List.map parse_record_item children in
@@ -596,17 +602,17 @@ and parse_exp_group =
   | Element ("Real_Literal", args, children) ->
      let typref = int_of_string @@ List.assoc "typref" args in
      let v = List.assoc "value" args in
-     Real_Literal (typref, v)
+     add_string ("real?" ^ v); Real_Literal (typref, v)
   | Element ("Record_Update", args, [x;y]) ->
      let c1 = parse_exp_group x in
      let label = List.assoc "label" args in
      let c2 = parse_exp_group y in
-     Record_Update (c1, label, c2)
+     add_string ("label?" ^ label); Record_Update (c1, label, c2)
   | Element ("Record_Field_Access", args, [x]) ->
      let typref = int_of_string @@ List.assoc "typref" args in
      let c = parse_exp_group x in
      let label = List.assoc "label" args in
-     Record_Field_Access (typref, c, label)
+     add_string ("label?" ^ label); Record_Field_Access (typref, c, label)
   | x -> parse_fail x
 
 type type_group =
@@ -628,7 +634,7 @@ let rec parse_type_group =
     | Element ("Record_Item", args, [x]) ->
        let label = List.assoc "label" args in
        let c = parse_type_group @@ x in
-       (label, c)
+       add_string ("label?" ^ label); (label, c)
     | x -> parse_fail x
   in
   function

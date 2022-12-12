@@ -1,4 +1,4 @@
-open Parser
+open Pogparser
 open Checker
 
 type dec_bigint = int list
@@ -60,8 +60,13 @@ let rec print_type_group =
        | s -> s
      end
   | Pow t -> "Set (" ^ print_type_group t ^ ")"
-  | Struct_type l -> "TODO struct"
+  | Struct_type l -> "struct_T (" ^ (print_struct l) ^ ")"
   | Generic_Type -> failwith "should not happen"
+and print_struct =
+  function
+  | [] -> assert false
+  | [(i,x)] -> "struct_nil label?" ^ i ^ " (" ^ (print_type_group x) ^ ")"
+  | (i,x) :: l -> "struct_cons label?" ^ i ^ " (" ^ (print_type_group x) ^ ") (" ^ print_struct l ^ ")"
 
 let print_var_list =
   List.fold_left (fun s (n,x,y) -> s ^ " (" ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "))") ""
@@ -108,13 +113,23 @@ let rec print_pred_group =
        | FSmaller -> "(" ^ e1 ^ ") <f (" ^ e2 ^ ")"
        | FLeq -> "(" ^ e1 ^ ") ≤f (" ^ e2 ^ ")"
      end
-  | Quantified_Pred (op, v, p) -> "TODO quantified pred"
+  | Quantified_Pred (op, v, p) ->
+     begin
+       match op with
+       | Forall -> (List.fold_right (fun (n,x,y) s -> "`∀ " ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
+       | Exists -> (List.fold_right (fun (n,x,y) s -> "`∃ " ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
+     end
   | Not p -> "¬ (" ^ print_pred_group p ^ ")"
   | Nary_Pred (op, pl) ->
-     begin
+     let sop = begin
      match op with
-     | And -> List.fold_left (fun s l -> "(" ^ s ^ ") ∧ (" ^ (print_pred_group l) ^ ")") (print_pred_group @@ List.hd pl) @@ List.tl pl
-     | Or ->  List.fold_left (fun s l -> "(" ^ s ^ ") ∨ (" ^ (print_pred_group l) ^ ")") (print_pred_group @@ List.hd pl) @@ List.tl pl
+     | And -> "∧"
+     | Or -> "∨"
+     end in
+     begin
+       match pl with
+       | [] -> if op = And then "FALSE" else "TRUE"
+       | pl -> List.fold_left (fun s l -> "(" ^ s ^ ") " ^ sop ^ " (" ^ (print_pred_group l) ^ ")") (print_pred_group @@ List.hd pl) @@ List.tl pl
      end
 and print_expr_group =
   function
@@ -230,7 +245,7 @@ and print_expr_group =
        | Maplet -> "(" ^ e1 ^ ") map (" ^ e2 ^ ")"
        | ImageRestrict -> "imagerestrict (" ^ e1 ^ ") (" ^ e2 ^ ")"
        | ImageSubtract -> "image- (" ^ e1 ^ ") (" ^ e2 ^ ")"
-       | Image -> failwith "should not exist"
+       | Image -> "image (" ^ e1 ^ ") (" ^ e2 ^ ")"
        | Eval -> "eval (" ^ e1 ^ ") (" ^ e2 ^ ")"
        | Doesntexist2 -> failwith "should not exist"
        | Prj1 -> "prj1 (" ^ e1 ^ ") (" ^ e2 ^ ")"
@@ -297,6 +312,7 @@ let print_expr =
 
 let print_typ =
   function
+  | ID -> "ID"
   | T -> "T"
   | U -> "U"
   | Thm p -> "Thm (" ^ (print_pred_group p) ^ ")"
