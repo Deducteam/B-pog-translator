@@ -294,16 +294,23 @@ and print_expr_group =
        | INTER -> "INTER" ^ print_quantified v p e
        | UNION -> "UNION" ^ print_quantified v p e
      end
-  | Quantified_Set (n, v, p) -> "TODO quantified set"
+  | Quantified_Set (n, v, p) ->
+     let abs = " (λ" ^ (print_var_list v) ^ ", " in
+   "comprehension [" ^ print_curry_helper v ^ "]" ^ abs ^ (print_pred_group p) ^ ")"
   | STRING_Literal (n, s) -> "TODO string"
-  | Struct_exp (n, l) -> "TODO struct"
-  | Record (n, l) -> "TODO record"
+  | Struct_exp (n, l) -> "struct (" ^ (print_struct l) ^ ")"
+  | Record (n, l) -> "record (" ^ (print_struct l) ^ ")"
   | Real_Literal (n, l) -> "TODO real"
   | Record_Update (e1,s,e2) -> "TODO record update"
   | Record_Field_Access (n, e, s) -> "TODO field access"
 and print_quantified v p e =
   let abs = " (λ" ^ (print_var_list v) ^ ", " in
    " [" ^ print_curry_helper v ^ "]" ^ abs ^ (print_pred_group p) ^ ")" ^ abs ^ (print_expr_group e) ^ ")"
+and print_struct =
+  function
+  | [] -> assert false
+  | [(i,x)] -> "record_nil label?" ^ i ^ " (" ^ (print_expr_group x) ^ ")"
+  | (i,x) :: l -> "record_cons label?" ^ i ^ " (" ^ (print_expr_group x) ^ ") (" ^ print_struct l ^ ")"
 
 let print_expr =
   function
