@@ -68,6 +68,18 @@ and print_struct =
   | [(i,x)] -> "struct_nil label?" ^ i ^ " (" ^ (print_type_group x) ^ ")"
   | (i,x) :: l -> "struct_cons label?" ^ i ^ " (" ^ (print_type_group x) ^ ") (" ^ print_struct l ^ ")"
 
+let prove_access s =
+  let rec foo =
+    function
+      | [(x, _)] when x = s -> "accessible_nil"
+      | (x, _) :: l when x = s -> "accessible_cons"
+      | x :: l -> "skip (" ^ foo l ^ ")"
+      | _ -> failwith "label " ^ s ^ " not found"
+  in
+  function
+    | Struct_type l -> foo l
+    | _ -> failwith "not a record"
+
 let print_var_list =
   List.fold_left (fun s (n,x,y) -> s ^ " (" ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "))") ""
 
@@ -302,7 +314,10 @@ and print_expr_group =
   | Record (n, l) -> "record (" ^ (print_struct l) ^ ")"
   | Real_Literal (n, l) -> "TODO real"
   | Record_Update (e1,s,e2) -> "TODO record update"
-  | Record_Field_Access (n, e, s) -> "TODO field access"
+  | Record_Field_Access (n, e, s) ->
+     let t = find_type e in
+     let p = prove_access s t in
+     "record_field_access (" ^ print_expr_group e ^ ") label?" ^ s ^ " (" ^ p ^ ")"
 and print_quantified v p e =
   let abs = " (λ" ^ (print_var_list v) ^ ", " in
    " [" ^ print_curry_helper v ^ "]" ^ abs ^ (print_pred_group p) ^ ")" ^ abs ^ (print_expr_group e) ^ ")"

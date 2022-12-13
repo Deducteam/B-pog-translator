@@ -46,6 +46,11 @@ let name s o =
   | None -> s
   | Some x -> s ^ "'" ^ (string_of_int x)
 
+let rec find_type =
+  function
+  | Unary_Exp (n,_,_) | Binary_Exp (n,_,_,_) | Ternary_Exp (n,_,_,_,_)| Nary_Exp (n,_,_) | Boolean_Literal (n,_) | Boolean_Exp (n,_) | EmptySet n | EmptySeq n | Id_exp (n,_,_) | Integer_Literal (n, _) | Quantified_Exp (n,_,_,_,_) | Quantified_Set (n,_,_) | STRING_Literal (n,_) | Struct_exp (n,_) | Record (n,_) | Real_Literal (n,_) | Record_Field_Access (n,_,_) -> get_type n
+  | Record_Update (e,_,_) -> find_type e
+
 let const2def (t,s,o) =
   Def (name s o, (Tau (get_type t), None))
 
@@ -74,7 +79,7 @@ let define2ns (Define (s,sl,pl)) =
   let s' = if s = "B definitions" then "B" else s in
   let sd = List.concat @@ List.map set2def sl in
   let pd = List.mapi (fun i x -> Def (string_of_int i ^ s', (Thm x, None))) pl in
-  NS (s,List.concat [sd;pd])
+  NS (s,sd), NS (s, pd)
 
 let simple_goal2ns suffix gl ll i (Simple_Goal (s, lh, pl, _)) =
   let s = sanitizename s in
@@ -92,8 +97,8 @@ let pos2ns (POs (d, po, ti')) =
     | None -> []
     | Some (TI x) -> x
   in ti := ti';
-  let d = List.map define2ns d in
+  let ds, dp = List.split @@ List.map define2ns d in
   let i = strings2ns () in
-  let c = free_vars2ns () in (* c should be evaluated after d, because of side-effects *)
+  let c = free_vars2ns () in (* c should be evaluated after ds, because of side-effects *)
   let p = List.mapi po2ns po in
-  i :: c :: List.concat [d; p]
+  i :: c :: List.concat [ds; dp; p]
