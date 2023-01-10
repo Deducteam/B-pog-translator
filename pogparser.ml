@@ -12,15 +12,15 @@ type id = int * string * int option (* for name clashes *)
 module Id =
   struct
     type t = int * string * int option (* for name clashes *)
-    let compare (_,x,y) (_,x',y') =
+    let compare (n,x,y) (n',x',y') =
       match String.compare x x' with
       | 0 ->
          begin
            match y, y' with
-           | Some a, Some b -> Int.compare a b
+           | Some a, Some b -> let r = Int.compare a b in if r = 0 then Int.compare n n' else r
            | Some a, None -> 1
            | None, Some b -> -1
-           | None, None -> 0
+           | None, None -> Int.compare n n'
          end
       | c -> c
   end

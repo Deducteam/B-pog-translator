@@ -57,7 +57,7 @@ let rec print_type_group =
        | "FLOAT" -> "FLOAT_T"
        | "BOOL" -> "BOOL_T"
        | "STRING" -> "STRING_T"
-       | s -> s
+       | s -> "type?" ^ s
      end
   | Pow t -> "Set (" ^ print_type_group t ^ ")"
   | Struct_type l -> "struct_T (" ^ (print_struct l) ^ ")"
@@ -81,7 +81,7 @@ let prove_access s =
     | _ -> failwith "not a record"
 
 let print_var_list =
-  List.fold_left (fun s (n,x,y) -> s ^ " (" ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "))") ""
+  List.fold_left (fun s (n,x,y) -> s ^ " (" ^ name n x y ^ " : τ (" ^ print_type_group (get_type n) ^ "))") ""
 
 let rec print_curry_helper =
   function
@@ -128,8 +128,8 @@ let rec print_pred_group =
   | Quantified_Pred (op, v, p) ->
      begin
        match op with
-       | Forall -> (List.fold_right (fun (n,x,y) s -> "`∀ " ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
-       | Exists -> (List.fold_right (fun (n,x,y) s -> "`∃ " ^ name x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
+       | Forall -> (List.fold_right (fun (n,x,y) s -> "`∀ " ^ name n x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
+       | Exists -> (List.fold_right (fun (n,x,y) s -> "`∃ " ^ name n x y ^ " : τ (" ^ print_type_group (get_type n) ^ "), (" ^ s ^ ")") v (print_pred_group p))
      end
   | Not p -> "¬ (" ^ print_pred_group p ^ ")"
   | Nary_Pred (op, pl) ->
@@ -288,10 +288,10 @@ and print_expr_group =
   | EmptySeq n ->
      begin
        match get_type n with
-       | Pow t -> "emptyseq (" ^ print_type_group t ^ ")"
+       | Pow (Product(Id_type "INTEGER",t)) -> "emptyseq (" ^ print_type_group t ^ ")"
        | _ -> failwith "not a set"
      end
-  | Id_exp (n,id,o) -> name id o
+  | Id_exp (n,id,o) -> name n id o
   | Integer_Literal (n, s) -> string2int s
   | Quantified_Exp (n, op, v, p, e) ->
      begin

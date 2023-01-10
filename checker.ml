@@ -41,10 +41,10 @@ let typeInfos2ns (TI l) =
       List.map (fun x -> Def (x,(T,None))) in NS ("Types", l)
 
 let get_type n = List.assoc n !ti
-let name s o =
+let name n s o =
   match o with
-  | None -> s
-  | Some x -> s ^ "'" ^ (string_of_int x)
+  | None -> if List.mem s predefined_sets then s else s ^ "_" ^ (string_of_int n)
+  | Some x -> s ^ "'" ^ (string_of_int x) ^ "_" ^ (string_of_int n)
 
 let rec find_type =
   function
@@ -52,7 +52,7 @@ let rec find_type =
   | Record_Update (e,_,_) -> find_type e
 
 let const2def (t,s,o) =
-  Def (name s o, (Tau (get_type t), None))
+  Def (name t s o, (Tau (get_type t), None))
 
 let free_vars2ns () =
   NS ("constants", List.map const2def @@ varlist ())
@@ -65,12 +65,12 @@ let set2def (Set ((t, s, o), l)) =
   | Pow x ->
      begin
        match l with
-       | None -> rem_var (t,s,o); [Def (name s o, (Tau (Pow x), None))]
+       | None -> rem_var (t,s,o); [Def (name t s o, (Tau (Pow x), None))]
        | Some l ->
           rem_var (t,s,o);
           let e = Nary_Exp (t, Extension, List.map (fun x -> Id_exp x) l)
           in
-          let d = Def (name s o, (Tau (Pow x), Some (Expr e))) in
+          let d = Def (name t s o, (Tau (Pow x), Some (Expr e))) in
           List.fold_left (fun l i -> rem_var i; const2def i :: l) [d] (List.rev l)
      end
   | _ -> failwith ("Error:" ^ s ^ "does not have a set type")
@@ -92,13 +92,35 @@ let po2ns i (PO (s,_,gl,ll,gol)) =
   let suffix = "_" ^ (string_of_int i) ^ sanitizename s in
   NS (s, List.mapi (simple_goal2ns suffix gl ll) gol)
 
+let rec insert s =
+  if List.mem s predefined_sets then fun x -> x else
+    function
+    | [] -> [s]
+    | x :: l when x > s -> s :: x :: l
+    | x :: l when x = s -> x :: l
+    | x :: l -> x :: (insert s l)
+
+let ti2ns () =
+  let rec foo l =
+    function
+    | Product (t1, t2) -> let l = foo l t1 in foo l t2
+    | Id_type s -> insert s l
+    | Pow t -> foo l t
+    | Struct_type sl -> List.fold_left (fun l (_,t) -> foo l t) l sl
+    | Generic_Type -> failwith "should not happen"
+  in
+  let l = List.fold_left (fun l (_,t) -> foo l t) [] !ti in
+  NS ("Types", List.map (fun s -> Def ("type?" ^ s, (T, None))) l)
+
 let pos2ns (POs (d, po, ti')) =
   let ti' = match ti' with
     | None -> []
     | Some (TI x) -> x
-  in ti := ti';
+  in
+  ti := ti';
+  let t = ti2ns () in
   let ds, dp = List.split @@ List.map define2ns d in
   let i = strings2ns () in
   let c = free_vars2ns () in (* c should be evaluated after ds, because of side-effects *)
   let p = List.mapi po2ns po in
-  i :: c :: List.concat [ds; dp; p]
+  t :: i :: c :: List.concat [ds; dp; p]
