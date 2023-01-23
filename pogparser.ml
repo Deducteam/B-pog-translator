@@ -165,7 +165,7 @@ let parse_variables ti =
        let n = List.assoc "typref" args |> int_of_string in
        let id = List.assoc "value" args in
        let a = List.assoc_opt "suffix" args in
-       Lp.Uid(object_name id a), tau (Hashtbl.find ti n)
+       Lp.Uid(object_name id a), Hashtbl.find ti n
     | x -> parse_fail x
   in List.map foo
 
@@ -273,9 +273,11 @@ and parse_exp ti =
      let b = parse_exp b in
      op v p b
   | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
-     let v = List.map (fun (x,y) -> x, Some y) @@ parse_variables children in
+     let v = parse_variables children  in
+     let h = helper v in
+     let v = List.map (fun (x,y) -> x, Some (tau y)) v in
      let b = Lp.Binder(Lp.Uid "λ", v, parse_pred b) in
-     comprehension b
+     comprehension h b
   | Element ("STRING_Literal", args, children) as z ->
      let v = List.assoc "value" args in parse_fail z
   | Element ("Struct", args, children) as z ->

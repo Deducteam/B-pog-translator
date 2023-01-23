@@ -212,14 +212,14 @@ let bin_ternary x y z = app (lp_id "bin_ternary") [(false, x); (false, y); (fals
 let sequence x = app (lp_id "sequence") [(false, x)]
 let extension x = app (lp_id "extension") [(false, x)]
 
-let lambda x y = app (lp_id "%") [(false, x); (false, y)]
-let isigma x y = app (lp_id "iSIGMA") [(false, x); (false, y)]
-let rsigma x y = app (lp_id "rSIGMA") [(false, x); (false, y)]
-let ipi x y = app (lp_id "iPI") [(false, x); (false, y)]
-let rpi x y = app (lp_id "rPI") [(false, x); (false, y)]
-let inter' x y = app (lp_id "INTER") [(false, x); (false, y)]
-let union' x y = app (lp_id "UNION") [(false, x); (false, y)]
-let comprehension x = app (lp_id "comprehension") [(false, x)]
+let lambda h x y = app (lp_id "%") [(true, h); (false, x); (false, y)]
+let isigma h x y = app (lp_id "iSIGMA") [(true, h); (false, x); (false, y)]
+let rsigma h x y = app (lp_id "rSIGMA") [(true, h); (false, x); (false, y)]
+let ipi h x y = app (lp_id "iPI") [(true, h); (false, x); (false, y)]
+let rpi h x y = app (lp_id "rPI") [(true, h); (false, x); (false, y)]
+let inter' h x y = app (lp_id "INTER") [(true, h); (false, x); (false, y)]
+let union' h x y = app (lp_id "UNION") [(true, h); (false, x); (false, y)]
+let comprehension h x = app (lp_id "comprehension") [(true, h); (false, x)]
 
 let trueb = lp_id "true"
 let falseb = lp_id "false"

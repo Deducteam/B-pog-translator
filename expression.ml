@@ -216,18 +216,25 @@ let quantified_pred_op s args body =
   | "#" -> List.fold_left (fun x (i,t) -> exists i t x) body args
   | x -> failwith ("Invalid predicate quantifier : " ^ x)
 
+let rec helper =
+  function
+  | [] -> assert false
+  | [(_,y)] -> typnil y
+  | (_,y) :: l -> typcons y (helper l)
+
 let quantified_exp_op s args b1 b2 =
-  let args = List.map (fun (x,y) -> x, Some y) args in
+  let helper = helper args in
+  let args = List.map (fun (x,y) -> x, Some (tau y)) args in
   let b1 = Lp.Binder(Lp.Uid "λ", args, b1) in
   let b2 = Lp.Binder(Lp.Uid "λ", args, b2) in
   begin
     match s with
-    | "%" -> lambda
-    | "isigma" -> isigma
-    | "rsigma" -> rsigma
-    | "ipi" -> ipi
-    | "rpi" -> rpi
-    | "inter" -> inter'
-    | "union" -> union'
+    | "%" -> lambda helper
+    | "isigma" -> isigma helper
+    | "rsigma" -> rsigma helper
+    | "ipi" -> ipi helper
+    | "rpi" -> rpi helper
+    | "inter" -> inter' helper
+    | "union" -> union' helper
     | x -> failwith ("Invalid expression quantifier : " ^ x)
   end b1 b2
