@@ -21,9 +21,11 @@ open Expression
    I should have a global out-file and a global set of ids as an environment
  *)
 
+let sanitizestring = String.map (function ' ' -> '_' | c -> c)
+
 let label_name x = "l_" ^ x
 let type_name x = "t_" ^ x
-let string_name x = "s_" ^ x
+let string_name x = "s_" ^ (sanitizestring x)
 let axiom_name x = "a_" ^ x
 let constants = ["INTEGER"; "REAL"; "FLOAT"; "BOOL"; "STRING"; "0"]
 let object_name x =
@@ -61,9 +63,14 @@ let env =
 
     method add x t y =
       if Stdlib.not (Hashtbl.mem s x || List.mem x constants) then
+        let opt =
+          match y with
+          | Some _ -> []
+          | None -> [Lp.Constant]
+        in
         begin
-        Lp.print o @@ Lp.Symbol([], Lp.Uid x, Some (tau t), y);
-        Hashtbl.add s x ()
+          Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, Some (tau t), y);
+          Hashtbl.add s x ()
         end
   end
 
@@ -84,6 +91,12 @@ let rec to_struct =
   | [] -> assert false
   | [x,y] -> struct_nil x y
   | (x,y) :: l -> struct_cons x y (to_struct l)
+
+let rec to_record =
+  function
+  | [] -> assert false
+  | [x,y] -> record_nil x y
+  | (x,y) :: l -> record_cons x y (to_record l)
 
 let parse_type_group hd id_set =
   let id_check s =
@@ -120,7 +133,7 @@ let parse_type_group hd id_set =
        end
     | Element ("Unary_Exp", args, [x]) -> set (foo x)
     | Element ("Struct", args, children) ->
-       List.map parse_record_item children |> to_struct
+       List.map parse_record_item children |> to_struct |> struct_t
     | x -> parse_fail x
   in foo
 
@@ -210,9 +223,9 @@ and parse_exp ti =
   let parse_record_item =
     function
     | Element ("Record_Item", args, [x]) ->
-       let label = List.assoc "label" args in
+       let label = List.assoc "label" args |> label_name |> lp_id in
        let c = parse_exp x in
-       (label, c)
+       label, c
     | x -> parse_fail x
   in
   function
@@ -278,23 +291,36 @@ and parse_exp ti =
      let v = List.map (fun (x,y) -> x, Some (tau y)) v in
      let b = Lp.Binder(Lp.Uid "λ", v, parse_pred b) in
      comprehension h b
-  | Element ("STRING_Literal", args, children) as z ->
-     let v = List.assoc "value" args in parse_fail z
-  | Element ("Struct", args, children) as z ->
-     let c = List.map parse_record_item children in parse_fail z
-  | Element ("Record", args, children) as z ->
-     let c = List.map parse_record_item children in parse_fail z
-  | Element ("Real_Literal", args, children) as z ->
-     let v = List.assoc "value" args in parse_fail z
+  | Element ("STRING_Literal", args, children) ->
+     let v = List.assoc "value" args in
+     let v = string_name v in
+     begin
+       print_endline "Warning: strings are not fully supported.";
+       env#add v string_t None;
+       lp_id v
+     end
+  | Element ("Struct", args, children) ->
+     List.map parse_record_item children |> to_record |> struct_exp
+  | Element ("Record", args, children) ->
+     List.map parse_record_item children |> to_record |> record
+  | Element ("Real_Literal", args, children) ->
+     let v = List.assoc "value" args in
+     begin
+       print_endline "Warning: reals are not fully supported.";
+       env#add v r_t None;
+       lp_id v
+     end
   | Element ("Record_Update", args, [x;y]) as z ->
      let c1 = parse_exp x in
      let label = List.assoc "label" args in
      let c2 = parse_exp y in
+     print_endline "record_update";
      parse_fail z
   | Element ("Record_Field_Access", args, [x]) as z ->
      let typref = int_of_string @@ List.assoc "typref" args in
      let c = parse_exp x in
      let label = List.assoc "label" args in
+     print_endline "record_field_access";
      parse_fail z
   | x -> parse_fail x
 
@@ -306,7 +332,7 @@ let new_axiom out ti a =
 let parse_hyp out ti a num =
   let name = hyp_name num in
   let term = parse_pred ti a in
-  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some u, Some term)
+  Lp.print out @@ Lp.Symbol([], Lp.Uid name, Some u, Some term)
 
 let parse_goal out ti l =
   let rec foo =
@@ -319,7 +345,7 @@ let parse_goal out ti l =
          foo l
        end
     | Element ("Ref_Hyp", args, _) :: l ->
-       let f = List.assoc "num" args |> hyp_name |> lp_id |> tau |> imply in
+       let f = List.assoc "num" args |> hyp_name |> lp_id |> imply in
        foo l |> f
     | [Element ("Goal", _, [x])]->
        parse_pred ti x
@@ -328,7 +354,7 @@ let parse_goal out ti l =
   in
   let name = string_of_int counter'#get |> goal_name in
   let term = foo l in
-  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some u, Some term)
+  Lp.print out @@ Lp.Symbol([], Lp.Uid name, Some u, Some term)
 
 let parse_id out ti =
   function
@@ -349,6 +375,7 @@ let parse_set out ti name t =
      let l = List.map (parse_id out ti) children in
      env#add name t (Some (extension (to_list l)))
   | [] -> env#add name t None
+  | _ -> assert false
 
 
 let parse_def out ti l =
@@ -377,12 +404,13 @@ let parse_po pog =
             |> Hashtbl.find pog.definitions
             |> parse_def out pog.type_infos
          | Element("Hypothesis", _, [x]) ->
-            print_endline "hypothesis" (* new_axiom out pog.type_infos x *)
+            new_axiom out pog.type_infos x
          | Element("Local_Hyp", args, [x]) ->
-            print_endline "local_hyp" (* List.assoc "num" args
-            |> parse_hyp out pog.type_infos x *)
+            List.assoc "num" args
+            |> parse_hyp out pog.type_infos x
          | Element("Simple_Goal", _, l) ->
-            print_endline "simple_goal" (* parse_goal out pog.type_infos l *)
+            parse_goal out pog.type_infos l
+         | x -> parse_fail x
        in
        List.iter (Lp.print out) pog.header;
        counter#init;

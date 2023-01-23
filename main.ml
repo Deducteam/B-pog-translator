@@ -39,6 +39,12 @@ let ( >> ) f g x = g (f x)
 
 let pog = !input |> file_to_tree |> parse_pog
 
+let print_pkg () =
+  let out = Out_channel.open_text "lambdapi.pkg" in
+  Out_channel.output_string out
+    "package_name = Foo\nroot_path    = Foo\n";
+  Out_channel.close out
+
 let () =
   if not (Sys.file_exists !output) then
     Sys.mkdir !output @@ 7*8*8 + 5*8 + 5;
@@ -48,14 +54,5 @@ let () =
       exit 1
     end;
   Sys.chdir !output;
+  print_pkg ();
   Queue.iter (parse_po pog) pog.obligations
-
-(* let () = *)
-(*   let lp = !input |> file_to_tree |> parse_proof_Obligations |> pos2ns in *)
-(*   let out = Out_channel.open_text !output in *)
-(*   let print = Printer.print_ns >> Out_channel.output_string out |> List.iter in *)
-(*   begin *)
-(*     Out_channel.output_string out "require open B.syntax;\n\n"; *)
-(*     print lp; *)
-(*     Out_channel.close out; *)
-(*   end *)

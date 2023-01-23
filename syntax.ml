@@ -52,11 +52,11 @@ let to_t x = app (lp_id "to_T") [(false, x)]
 let struct_sig = lp_id "struct_sig"
 let struct_nil x y = app (lp_id "struct_nil") [(false, x); (false, y)]
 let struct_cons x y z = app (lp_id "struct_cons") [(false, x); (false, y); (false, z)]
-let struct_t x y = app (lp_id "to_T") [(false, x); (false, y)]
+let struct_t x = app (lp_id "struct_T") [(false, x)]
 
 let record_sig = lp_id "record_sig"
 let record_nil ?(t=None) x y = app (lp_id "record_nil") @@ implicit t [(false, x); (false, y)]
-let record_cons ?(t=None) x y = app (lp_id "record_cons") @@ implicit t [(false, x); (false, y)]
+let record_cons ?(t=None) x y z = app (lp_id "record_cons") @@ implicit t [(false, x); (false, y); (false, z)]
 
 let struct_type x = app (lp_id "struct_type") [(false, x)]
 

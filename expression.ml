@@ -69,8 +69,8 @@ let unary_op =
   | "card" -> card
   | "dom" -> dom
   | "ran" -> ran
-  | "pow" -> pow
-  | "pow1" -> pow1
+  | "POW" -> pow
+  | "POW1" -> pow1
   | "fin" -> fin
   | "fin1" -> fin1
   | "union" -> union_gen
@@ -212,8 +212,8 @@ let nary_op =
 
 let quantified_pred_op s args body =
   match s with
-  | "!" -> List.fold_left (fun x (i,t) -> forall i t x) body args
-  | "#" -> List.fold_left (fun x (i,t) -> exists i t x) body args
+  | "!" -> List.fold_left (fun x (i,t) -> forall i (tau t) x) body args
+  | "#" -> List.fold_left (fun x (i,t) -> exists i (tau t) x) body args
   | x -> failwith ("Invalid predicate quantifier : " ^ x)
 
 let rec helper =
@@ -230,11 +230,11 @@ let quantified_exp_op s args b1 b2 =
   begin
     match s with
     | "%" -> lambda helper
-    | "isigma" -> isigma helper
-    | "rsigma" -> rsigma helper
-    | "ipi" -> ipi helper
-    | "rpi" -> rpi helper
-    | "inter" -> inter' helper
-    | "union" -> union' helper
+    | "iSIGMA" -> isigma helper
+    | "rSIGMA" -> rsigma helper
+    | "iPI" -> ipi helper
+    | "rPI" -> rpi helper
+    | "INTER" -> inter' helper
+    | "UNION" -> union' helper
     | x -> failwith ("Invalid expression quantifier : " ^ x)
   end b1 b2
