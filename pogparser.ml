@@ -1,805 +1,408 @@
-type ast = Element of string * (string * string) list * ast list | Text of string
+open Syntax
+open Expression
 
-exception Bad_Ast of ast
+(* new idea:
+   create a folder for the output
+   the POs should become a structure containing:
+   - a hashtable for the Define blocks : (string, ast) Hashtbl.t
+   - a list for the Proof_Obligation blocks: ast list
+   - the typeInfos block : (string, Lp.term) Hashtbl.t
+   - the header, obtained from "require open ..." followed by the declarations of the typeInfos blocks
 
-let sanitizename = String.map (function ' ' -> '-' | c -> c)
+   Then, for each po:
+   - take the name of the PO in order to create a new file
+   - write the header
+   - make a pass on every required define block
+   - Have a set of already declared stuff (i.e. free name, integers)
+   - if a "required" dependency does not exist, declare it
+   - declare all local hypothesis
+   - declare all goals
 
-let parse_fail x = raise (Bad_Ast x)
+   I should have a global out-file and a global set of ids as an environment
+ *)
 
-let predefined_sets = ["BOOL"; "INTEGER"; "REAL"; "FLOAT"; "STRING"]
+let label_name x = "l_" ^ x
+let type_name x = "t_" ^ x
+let string_name x = "s_" ^ x
+let axiom_name x = "a_" ^ x
+let constants = ["INTEGER"; "REAL"; "FLOAT"; "BOOL"; "STRING"; "0"]
+let object_name x =
+  function
+  | None -> if List.mem x constants then x else "o_" ^ x
+  | Some s -> "o_" ^ x ^ "'" ^ s
+let hyp_name x = "h_" ^ x
+let goal_name x = "g_" ^ x
 
-type id = int * string * int option (* for name clashes *)
-module Id =
-  struct
-    type t = int * string * int option (* for name clashes *)
-    let compare (n,x,y) (n',x',y') =
-      match String.compare x x' with
-      | 0 ->
-         begin
-           match y, y' with
-           | Some a, Some b -> let r = Int.compare a b in if r = 0 then Int.compare n n' else r
-           | Some a, None -> 1
-           | None, Some b -> -1
-           | None, None -> Int.compare n n'
-         end
-      | c -> c
+class counter =
+  object
+    val mutable x = 0
+
+    method init =
+      x <- 0
+
+    method get =
+      let y = x in
+      x <- x + 1;
+      y
+  end
+let counter = new counter
+let counter' = new counter
+
+let env =
+  object
+    val s = Hashtbl.create 512
+    val mutable o = stdout
+
+    method init out =
+      begin
+        o <- out;
+        Hashtbl.clear s
+      end
+
+    method add x t y =
+      if Stdlib.not (Hashtbl.mem s x || List.mem x constants) then
+        begin
+        Lp.print o @@ Lp.Symbol([], Lp.Uid x, Some (tau t), y);
+        Hashtbl.add s x ()
+        end
   end
 
-module Id_Set = Set.Make(Id)
-module String_Set = Set.Make(String)
+type ast = Element of string * (string * string) list * ast list | Text of string
+exception Bad_Ast of ast
+let parse_fail x = raise (Bad_Ast x)
 
-let free_vars = ref (Id_Set.empty)
-let bound_vars = ref (Id_Set.empty)
-let strings = ref (String_Set.empty)
-let add_var x = if not (Id_Set.mem x !bound_vars) then free_vars := Id_Set.add x !free_vars
-let rem_var x = free_vars := Id_Set.remove x !free_vars
-let add_bound x = bound_vars := Id_Set.add x !bound_vars
-let rem_bound x = bound_vars := Id_Set.remove x !bound_vars
-let rem_list l = List.iter rem_bound l
-let varlist () = Id_Set.elements !free_vars
-let add_string x = strings := String_Set.add x !strings
-let stringlist () = String_Set.elements !strings
+type pog =
+  {
+    definitions : (string, ast list) Hashtbl.t;
+    obligations : (ast list) Queue.t;
+    type_infos : (int, Lp.term) Hashtbl.t;
+    header : Lp.command list
+  }
 
-let parse_id =
+let rec to_struct =
   function
-  | Element ("Id", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v = List.assoc "value" args in
-     let s = Option.map int_of_string @@ List.assoc_opt "suffix" args in
-     let r = typref, v, s in
-     begin
-       match s with
-         | Some x -> add_var r
-         | None ->
-            if not (List.mem v predefined_sets) then add_var r
-     end; r
-  | x -> parse_fail x
+  | [] -> assert false
+  | [x,y] -> struct_nil x y
+  | (x,y) :: l -> struct_cons x y (to_struct l)
 
-type binary_pred_op =
-  | Imply (* => *)
-  | Equiv (* <=> *)
-
-let parse_binary_pred_op =
-  function
-  | "=>" -> Imply
-  | "<=>" -> Equiv
-  | x -> failwith ("Invalid binary predicate operator : " ^ x)
-
-type nary_pred_op =
-  | And (* & *)
-  | Or (* or *)
-
-let parse_nary_pred_op =
-  function
-  | "&" -> And
-  | "or" -> Or
-  | x -> failwith ("Invalid n-ary predicate operator : " ^ x)
-
-type comparison_op =
-  | Belong (* : *)
-  | NotBelong (* /: *)
-  | Included (* <: *)
-  | NotIncluded (* /<: *)
-  | StrictIncluded (* <<: *)
-  | NotStrictIncluded (* /<<: *)
-  | Equal (* = *)
-  | NotEqual (* /= *)
-  (* integer comparison *)
-  | IGeq (* >=i *)
-  | IGreater (* >i *)
-  | ISmaller (* <i *)
-  | ILeq (* <=i *)
-  (* real comparison *)
-  | RGeq (* >=r *)
-  | RGreater (* >r *)
-  | RSmaller (* <r *)
-  | RLeq (* <=r *)
-  (* float comparison *)
-  | FGeq (* >=f *)
-  | FGreater (* >f *)
-  | FSmaller (* <f *)
-  | FLeq (* <=f *)
-
-let parse_comparison_op =
-  function
-  | ":" -> Belong
-  | "/:" -> NotBelong
-  | "<:" -> Included
-  | "/<:" -> NotIncluded
-  | "<<:" -> StrictIncluded
-  | "/<<:" -> NotStrictIncluded
-  | "=" -> Equal
-  | "/=" -> NotEqual
-  (* integer comparison *)
-  | ">=i" -> IGeq
-  | ">i" -> IGreater
-  | "<i" -> ISmaller
-  | "<=i" -> ILeq
-  (* real comparison *)
-  | ">=r" -> RGeq
-  | ">r" -> RGreater
-  | "<r" -> RSmaller
-  | "<=r" -> RLeq
-  (* float comparison *)
-  | ">=f" -> FGeq
-  | ">f" -> FGreater
-  | "<f" -> FSmaller
-  | "<=f" -> FLeq
-  | x -> failwith ("Invalid comparison operator : " ^ x)
-
-type quantified_pred_op =
-  | Forall (* ! *)
-  | Exists (* # *)
-
-let parse_quantified_pred_op =
-  function
-  | "!" -> Forall
-  | "#" -> Exists
-  | x -> failwith ("Invalid predicate quantifier : " ^ x)
-
-type unary_exp_op =
-  | Max (* max *) (* should not exist *)
-  | IMax (* imax *)
-  | RMax (* rmax *)
-  | Min (* min *) (* should not exist *)
-  | IMin (* imin *)
-  | RMin (* rmin *)
-  | Card (* card *)
-  | Dom (* dom *)
-  | Ran (* ran *)
-  | POW (* POW *)
-  | POW1 (* POW1 *)
-  | FIN (* FIN *)
-  | FIN1 (* FIN1 *)
-  | Union_gen (* union *)
-  | Inter_gen (* inter *)
-  | Seq (* seq *)
-  | Seq1 (* seq1 *)
-  | ISeq (* iseq *)
-  | Iseq1 (* iseq1 *)
-  | Minus (* - *) (* should not exist *)
-  | IMinus (* -i *)
-  | RMinus (* -r *)
-  | Inversion (* ~ *)
-  | Size (* size *)
-  | Perm (* perm *)
-  | First (* first *)
-  | Last (* last *)
-  | Identity (* id *)
-  | Closure (* closure *)
-  | Closure1 (* closure1 *)
-  | Tail (* tail *)
-  | Front (* front *)
-  | Rev (* rev *)
-  | Conc (* conc *)
-  | Succ (* succ *)
-  | Pred (* pred *)
-  | Rel (* rel *)
-  | Fnc (* fnc *)
-  | Real (* real *)
-  | Floor (* floor *)
-  | Ceiling (* ceiling *)
-  | Tree (* tree *)
-  | Btree (* btree *)
-  | Top (* top *)
-  | Sons (* sons *)
-  | Prefix (* prefix *)
-  | Postfix (* postfix *)
-  | Sizet (* sizet *)
-  | Mirror (* mirror *)
-  | Left (* left *)
-  | Right (* right *)
-  | Infix (* infix *)
-  | Bin_unary (* bin *)
-
-let parse_unary_exp_op =
-  function
-  | "max" -> Max (* should not exist *)
-  | "imax" -> IMax
-  | "rmax" -> RMax
-  | "min" -> Min (* should not exist *)
-  | "imin" -> IMin
-  | "rmin" -> RMin
-  | "card" -> Card
-  | "dom" -> Dom
-  | "ran" -> Ran
-  | "POW" -> POW
-  | "POW1" -> POW1
-  | "FIN" -> FIN
-  | "FIN1" -> FIN1
-  | "union" -> Union_gen
-  | "inter" -> Inter_gen
-  | "seq" -> Seq
-  | "seq1" -> Seq1
-  | "iseq" -> ISeq
-  | "iseq1" -> Iseq1
-  | "-" -> Minus (* should not exist *)
-  | "-i" -> IMinus
-  | "-r" -> RMinus
-  | "~" -> Inversion
-  | "size" -> Size
-  | "perm" -> Perm
-  | "first" -> First
-  | "last" -> Last
-  | "id" -> Identity
-  | "closure" -> Closure
-  | "closure1" -> Closure1
-  | "tail" -> Tail
-  | "front" -> Front
-  | "rev" -> Rev
-  | "conc" -> Conc
-  | "succ" -> Succ
-  | "pred" -> Pred
-  | "rel" -> Rel
-  | "fnc" -> Fnc
-  | "real" -> Real
-  | "floor" -> Floor
-  | "ceiling" -> Ceiling
-  | "tree" -> Tree
-  | "btree" -> Btree
-  | "top" -> Top
-  | "sons" -> Sons
-  | "prefix" -> Prefix
-  | "postfix" -> Postfix
-  | "sizet" -> Sizet
-  | "mirror" -> Mirror
-  | "left" -> Left
-  | "right" -> Right
-  | "infix" -> Infix
-  | "bin" -> Bin_unary
-  | x -> failwith ("Invalid unary expression : " ^ x)
-
-type binary_exp_op =
-  | Pair (* , *)
-  | Prod (* * *) (* should not exist *)
-  | IProd (* *i *)
-  | RProd (* *r *)
-  | FProd (* *f *)
-  | SProd (* *s *)
-  | Exp (* ** *) (* should not exist *)
-  | IExp (* **i *)
-  | RExp (* **r *)
-  | Plus (* + *) (* should not exist *)
-  | IPlus (* +i *)
-  | RPlus (* +r *)
-  | FPlus (* +f *)
-  | Partial (* +-> *)
-  | PartialSurj (* +->> *)
-  | Minus (* - *) (* should not exist *)
-  | IMinus (* -i *)
-  | RMinus (* -r *)
-  | FMinus (* -f *)
-  | SMinus (* -s *)
-  | Total (* --> *)
-  | TotalSurj (* -->> *)
-  | HeadInsert (* -> *)
-  | Interval (* .. *)
-  | Div (* / *) (* should not exist *)
-  | IDiv (* /i *)
-  | RDiv (* /r *)
-  | FDiv (* /f *)
-  | Inter (* /\ *)
-  | HeadRestrict (* /|\ *)
-  | Compose (* ; *)
-  | Overload (* <+ *)
-  | Relation (* <-> *)
-  | TailInsert (* <- *)
-  | DomSubtract (* <<| *)
-  | DomRestrict (* <| *)
-  | PartialInject (* >+> *)
-  | TotalInject (* >-> *)
-  | DoesntExist (* >+>> *) (* should not exist *)
-  | TotalBiject (* >->> *)
-  | DirectProd (* >< *)
-  | ParallelProd (* || *)
-  | Union (* \/ *)
-  | TailRestrict (* \|/ *)
-  | Concat (* ^ *)
-  | Mod (* mod *)
-  | Maplet (* |-> *)
-  | ImageRestrict (* |> *)
-  | ImageSubtract (* |>> *)
-  | Image (* [ *) (* Image of a relation *)
-  | Eval (* ( *) (* Image of a function *)
-  | Doesntexist2 (* <' *) (* should not exist *)
-  | Prj1 (* prj1 *)
-  | Prj2 (* prj2 *)
-  | Iterate (* iterate *)
-  | Const (* const *)
-  | Rank (* rank *)
-  | Father (* father *)
-  | Subtree (* subtree *)
-  | Arity (* arity *)
-
-let parse_binary_exp_op =
-  function
-  | "," -> Pair
-  | "*" -> Prod (* should not exist *)
-  | "*i" -> IProd
-  | "*r" -> RProd
-  | "*f" -> FProd
-  | "*s" -> SProd
-  | "**" -> Exp (* should not exist *)
-  | "**i" -> IExp
-  | "**r" -> RExp
-  | "+" -> Plus (* should not exist *)
-  | "+i" -> IPlus
-  | "+r" -> RPlus
-  | "+f" -> FPlus
-  | "+->" -> Partial
-  | "+->>" -> PartialSurj
-  | "-" -> Minus (* should not exist *)
-  | "-i" -> IMinus
-  | "-r" -> RMinus
-  | "-f" -> FMinus
-  | "-s" -> SMinus
-  | "-->" -> Total
-  | "-->>" -> TotalSurj
-  | "->" -> HeadInsert
-  | ".." -> Interval
-  | "/" -> Div (* should not exist *)
-  | "/i" -> IDiv
-  | "/r" -> RDiv
-  | "/f" -> FDiv
-  | "/\\" -> Inter
-  | "/|\\" -> HeadRestrict
-  | ";" -> Compose
-  | "<+" -> Overload
-  | "<->" -> Relation
-  | "<-" -> TailInsert
-  | "<<|" -> DomSubtract
-  | "<|" -> DomRestrict
-  | ">+>" -> PartialInject
-  | ">->" -> TotalInject
-  | ">+>>" -> DoesntExist (* should not exist *)
-  | ">->>" -> TotalBiject
-  | "><" -> DirectProd
-  | "||" -> ParallelProd
-  | "\\/" -> Union
-  | "\\|/" -> TailRestrict
-  | "^" -> Concat
-  | "mod" -> Mod
-  | "|->" -> Maplet
-  | "|>" -> ImageRestrict
-  | "|>>" -> ImageSubtract
-  | "[" -> Image (* Image of a relation *)
-  | "(" -> Eval (* Image of a function *)
-  | "<'" -> Doesntexist2 (* should not exist *)
-  | "prj1" -> Prj1
-  | "prj2" -> Prj2
-  | "iterate" -> Iterate
-  | "const" -> Const
-  | "rank" -> Rank
-  | "father" -> Father
-  | "subtree" -> Subtree
-  | "arity" -> Arity
-  | x -> failwith ("Invalid binary expression : " ^ x)
-
-type ternary_exp_op =
-  | Son (* son *)
-  | Bin_ternary (* bin *)
-
-let parse_ternary_exp_op =
-  function
-  | "son" -> Son
-  | "bin" -> Bin_ternary
-  | x -> failwith ("Invalid ternary expression : " ^ x)
-
-type nary_exp_op =
-  | Sequence (* [ *)
-  | Extension (* { *)
-
-let parse_nary_exp_op =
-  function
-  | "[" -> Sequence
-  | "{" -> Extension
-  | x -> failwith ("Invalid n-ary expression : " ^ x)
-
-type quantified_exp_op =
-   | Lambda (* % *)
-   | SIGMA (* SIGMA *) (* should not exist *)
-   | ISIGMA (* iSIGMA *)
-   | RSIGMA (* rSIGMA *)
-   | PI (* PI *) (* should not exist *)
-   | IPI (* iPI *)
-   | RPI (* rPI *)
-   | INTER (* INTER *)
-   | UNION (* UNION *)
-
-let parse_quantified_exp_op =
-  function
-  | "%" -> Lambda
-  | "SIGMA" -> SIGMA (* should not exist *)
-  | "iSIGMA" -> ISIGMA
-  | "rSIGMA" -> RSIGMA
-  | "PI" -> PI (* should not exist *)
-  | "iPI" -> IPI
-  | "rPI" -> RPI
-  | "INTER" -> INTER
-  | "UNION" -> UNION
-  | x -> failwith ("Invalid expression quantifier : " ^ x)
-
-(* the int is the 0-starting index of the TypeInfos *)
-type variables_type = (int * string * int option) list
-
-let parse_variable =
-  function
-  | Element ("Id", args, []) -> let n = int_of_string @@ List.assoc "typref" args, List.assoc "value" args, Option.map int_of_string @@ List.assoc_opt "suffix" args in add_bound n; n
-  | x -> parse_fail x
-
-let parse_variables_type = List.map parse_variable
-
-type pred_group =
-  | Binary_Pred of binary_pred_op * pred_group * pred_group
-  | Exp_Comparison of comparison_op * exp_group * exp_group
-  | Quantified_Pred of quantified_pred_op * variables_type * pred_group
-  | Not of pred_group
-  | Nary_Pred of nary_pred_op * pred_group list
-and exp_group = (* the int is the 0-starting index of the TypeInfos *)
-  | Unary_Exp of int * unary_exp_op * exp_group
-  | Binary_Exp of int * binary_exp_op * exp_group * exp_group
-  | Ternary_Exp of int * ternary_exp_op * exp_group * exp_group * exp_group
-  | Nary_Exp of int * nary_exp_op * exp_group list (* non-empty *)
-  | Boolean_Literal of int * bool
-  | Boolean_Exp of int * pred_group
-  | EmptySet of int
-  | EmptySeq of int
-  | Id_exp of id
-  | Integer_Literal of int * string (* represent int as a string to avoid size problems *)
-  | Quantified_Exp of int * quantified_exp_op * variables_type * pred_group * exp_group
-  | Quantified_Set of int * variables_type * pred_group
-  | STRING_Literal of int * string
-  | Struct_exp of int * (string * exp_group) list (* non-empty *)
-  | Record of int * (string * exp_group) list (* non-empty *)
-  | Real_Literal of int * string (* represent a real as a string *)
-  | Record_Update of exp_group * string * exp_group
-  | Record_Field_Access of int * exp_group * string
-
-let rec parse_pred_group =
-  function
-  | Element ("Binary_Pred", args, [x;y]) ->
-     let op = parse_binary_pred_op @@ List.assoc "op" args in
-     let c1 = parse_pred_group x in
-     let c2 = parse_pred_group y in
-     Binary_Pred (op, c1, c2)
-  | Element ("Exp_Comparison", args, [x;y]) ->
-     let op = parse_comparison_op @@ List.assoc "op" args in
-     let c1 = parse_exp_group @@ x in
-     let c2 = parse_exp_group @@ y in
-     Exp_Comparison (op, c1, c2)
-  | Element ("Quantified_Pred", args, [x;y]) ->
-     let op = parse_quantified_pred_op @@ List.assoc "type" args in
-     let v =
-       begin
-         match x with
-         | Element ("Variables", _, children) -> parse_variables_type children
-         | x -> parse_fail x
-       end in
-     let p =
-       begin
-         match y with
-         | Element ("Body", _, [x]) -> parse_pred_group x
-         | x -> parse_fail x
-       end in
-     rem_list v; Quantified_Pred (op, v, p)
-  | Element ("Unary_Pred", args, [x]) as err ->
-     let () = if List.assoc "op" args <> "not" then parse_fail err in
-     Not(parse_pred_group x)
-  | Element ("Nary_Pred", args, children) ->
-     let op = parse_nary_pred_op @@ List.assoc "op" args in
-     let c = List.map parse_pred_group children in
-     Nary_Pred (op, c)
-  | x -> parse_fail x
-and parse_exp_group =
-  let parse_record_item =
-    function
-    | Element ("Record_Item", args, [x]) ->
-       let label = List.assoc "label" args in
-       let c = parse_exp_group x in
-       add_string ("label?" ^ label); (label, c)
-    | x -> parse_fail x
+let parse_type_group hd id_set =
+  let id_check s =
+    if Stdlib.not (Hashtbl.mem id_set s) then
+      begin
+        Queue.add (Lp.Symbol ([Lp.Constant], Lp.Uid s, Some id, None)) hd;
+        Hashtbl.add id_set s ()
+      end
   in
-  function
-  | Element ("Unary_Exp", args, [x]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let op = parse_unary_exp_op @@ List.assoc "op" args in
-     let c = parse_exp_group x in
-     Unary_Exp (typref, op, c)
-  | Element ("Binary_Exp", args, [x;y]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let op = parse_binary_exp_op @@ List.assoc "op" args in
-     let c1 = parse_exp_group x in
-     let c2 = parse_exp_group y in
-     Binary_Exp (typref, op, c1, c2)
-  | Element ("Ternary_Exp", args, [x;y;z]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let op = parse_ternary_exp_op @@ List.assoc "op" args in
-     let c1 = parse_exp_group x in
-     let c2 = parse_exp_group y in
-     let c3 = parse_exp_group z in
-     Ternary_Exp (typref, op, c1, c2, c3)
-  | Element ("Nary_Exp", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let op = parse_nary_exp_op @@ List.assoc "op" args in
-     let c = List.map parse_exp_group children in
-     Nary_Exp (typref, op, c)
-  | Element ("Boolean_Literal", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v =
+  let rec foo =
+    let parse_record_item =
+      function
+      | Element ("Record_Item", args, [x]) ->
+         let label = List.assoc "label" args |> label_name in
+         id_check label;
+         let c = foo x in
+         lp_id label, c
+      | x -> parse_fail x
+    in
+    function
+    | Element ("Binary_Exp", args, [x;y]) ->
+       (foo x) * (foo y)
+    | Element ("Id", args, children) ->
        begin
          match List.assoc "value" args with
-         | "TRUE" -> true
-         | "FALSE" -> false
-         | _ -> failwith "wrong Boolean literal"
-       end in
-     Boolean_Literal (typref, v)
-  | Element ("Boolean_Exp", args, [x]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let c = parse_pred_group x in
-     Boolean_Exp(typref, c)
-  | Element ("EmptySet", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     EmptySet (typref)
-  | Element ("EmptySeq", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     EmptySeq (typref)
-  | Element ("Id", args, children) as x ->
-     let typref, v, s = parse_id x in
-     Id_exp (typref, v, s)
-  | Element ("Integer_Literal", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v = List.assoc "value" args in
-     Integer_Literal (typref, v)
-  | Element ("Quantified_Exp", args, [x;y;z]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let op = parse_quantified_exp_op @@ List.assoc "type" args in
-     let v =
-       begin
-         match x with
-         | Element ("Variables", _, children) -> parse_variables_type children
-         | x -> parse_fail x
-       end in
-     let p =
-       begin
-         match y with
-         | Element ("Pred", _, [x]) -> parse_pred_group x
-         | x -> parse_fail x
-       end in
-     let b =
-       begin
-         match z with
-         | Element ("Body", _, [x]) -> parse_exp_group x
-         | x -> parse_fail x
-       end in
-     rem_list v; Quantified_Exp (typref, op, v, p, b)
-  | Element ("Quantified_Set", args, [x;y]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v =
-       begin
-         match x with
-         | Element ("Variables", _, children) -> parse_variables_type children
-         | x -> parse_fail x
-       end in
-     let b =
-       begin
-         match y with
-         | Element ("Body", _, [x]) -> parse_pred_group x
-         | x -> parse_fail x
-       end in
-     rem_list v; Quantified_Set (typref, v, b)
-  | Element ("STRING_Literal", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v = List.assoc "value" args in
-     add_string ("string?" ^ sanitizename v); STRING_Literal (typref, v)
-  | Element ("Struct", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let c = List.map parse_record_item children in
-     Struct_exp (typref, c)
-  | Element ("Record", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let c = List.map parse_record_item children in
-     Record (typref, c)
-  | Element ("Real_Literal", args, children) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let v = List.assoc "value" args in
-     add_string ("real?" ^ v); Real_Literal (typref, v)
-  | Element ("Record_Update", args, [x;y]) ->
-     let c1 = parse_exp_group x in
-     let label = List.assoc "label" args in
-     let c2 = parse_exp_group y in
-     add_string ("label?" ^ label); Record_Update (c1, label, c2)
-  | Element ("Record_Field_Access", args, [x]) ->
-     let typref = int_of_string @@ List.assoc "typref" args in
-     let c = parse_exp_group x in
-     let label = List.assoc "label" args in
-     add_string ("label?" ^ label); Record_Field_Access (typref, c, label)
-  | x -> parse_fail x
-
-type type_group =
-  | Product of type_group * type_group
-  | Id_type of string
-  | Pow of type_group
-  | Struct_type of (string * type_group) list (* non-empty *)
-  | Generic_Type
-
-let int_type = Id_type "INTEGER"
-let bool_type = Id_type "BOOL"
-let real_type = Id_type "REAL"
-let float_type = Id_type "FLOAT"
-let string_type = Id_type "STRING"
-
-let rec parse_type_group =
-  let parse_record_item =
-    function
-    | Element ("Record_Item", args, [x]) ->
-       let label = List.assoc "label" args in
-       let c = parse_type_group @@ x in
-       add_string ("label?" ^ label); (label, c)
+         | "INTEGER" -> z_t
+         | "REAL" -> r_t
+         | "FLOAT" -> float_t
+         | "BOOL" -> bool_t
+         | "STRING" -> string_t
+         | s ->
+            id_check (type_name s);
+            lp_id s
+       end
+    | Element ("Unary_Exp", args, [x]) -> set (foo x)
+    | Element ("Struct", args, children) ->
+       List.map parse_record_item children |> to_struct
     | x -> parse_fail x
-  in
-  function
-  | Element ("Binary_Exp", args, [x;y]) ->
-     let c1 = parse_type_group x in
-     let c2 = parse_type_group y in
-     Product (c1, c2)
-  | Element ("Id", args, children) ->
-     let v = List.assoc "value" args in
-     Id_type v
-  | Element ("Unary_Exp", args, [x]) ->
-     let c = parse_type_group x in
-     Pow c
-  | Element ("Struct", args, children) ->
-     let c = List.map parse_record_item children in
-     Struct_type c
-  | Element ("Generic_Type", args, children) ->
-     Generic_Type
-  | x -> parse_fail x
+  in foo
 
 (* probably useless, but names of define contexts should belong here *)
 let possible_contexts = ["B definitions";"ctx";"seext";"inv";"ass";"lprp";"inprp";"inext";"cst";"sets";"mchcst";"aprp";"abs";"imlprp";"imprp";"imext"]
 
-type set = Set of id * id list option
-
-let parse_set =
-  function
-  | Element ("Set", args, x::children) ->
-     let typref, v, s = parse_id @@ x in
-     let c =
+let parse_pog =
+  let d = Hashtbl.create (List.length possible_contexts) in
+  let o = Queue.create () in
+  let ti = Hashtbl.create 128 in
+  let hd = Queue.create () in
+  let iter =
+    function
+    | Element("Define", args, children) -> Hashtbl.add d (List.assoc "name" args) children
+    | Element ("Proof_Obligation", args, children) -> Queue.add children o
+    | Element ("TypeInfos", args, children) ->
        begin
-         match children with
-         | [Element ("Enumerated_Values", args, children)] ->
-            Option.some @@ List.map parse_id children
-         | _ -> None
-       end in
-     Set ((typref, v, s), c)
-  | x -> parse_fail x
-
-type define = Define of string * set list * pred_group list
-
-let take s l = List.filter (function | Element (n,_,_) -> n = s | _ -> false) l
-
-let parse_define =
-  function
-  | Element ("Define", args, children) ->
-     let n = List.assoc "name" args in
-     let s = List.map parse_set (take "Set" children) in
-     let p = List.map parse_pred_group (List.filter (function | Element (n,_,_) -> n <> "Set" | _ -> false) children) in
-     Define (n, s, p)
-  | x -> parse_fail x
-
-type local_Hyp = int * pred_group
-
-let parse_local_hyp =
-  function
-  | Element ("Local_Hyp", args, x::_) ->
-     let n = int_of_string @@ List.assoc "num" args in
-     let s = parse_pred_group x in
-     (n, s)
-  | x -> parse_fail x
-
-(* deprecated *)
-type proof_State = string * string * string
-
-let parse_proof_State =
-  function
-  | Element ("Proof_State", args, children) ->
-     let pa = List.assoc "passList" args in
-     let m = List.assoc "methodList" args in
-     let pr = List.assoc "proofState" args in
-     pa, m, pr
-  | x -> parse_fail x
-
-(* name of Goal * list of local hypothesis * list of goals * list of proof states *)
-type simple_Goal = Simple_Goal of string * int list * pred_group list * proof_State list
-
-let parse_simple_goal =
-  function
-  | Element ("Simple_Goal", args, x::children) ->
-     let s =
-       begin
-         match x with
-         | Element("Tag", args, [Text(s)]) -> s
-         | x -> parse_fail x
-       end in
-     let lh =
-       take "Ref_Hyp" children |>
-         List.map @@
-           function
-           | Element (_,args,_) -> int_of_string @@ List.assoc "num" args
-           | x -> parse_fail x
-     in
-     let g =
-       take "Goal" children |>
-         List.map @@
-           function
-           | Element (_,_, x::_) -> parse_pred_group x
-           | x -> parse_fail x
-     in
-     let ps = List.map parse_proof_State (take "Proof_State" children) in
-     Simple_Goal (s, lh, g, ps)
-  | x -> parse_fail x
-
-(* name of PO * list of names of definitions used * list of hypothesis * list of local hypothesis * list of goals *)
-type proof_Obligation = PO of string * string list * pred_group list * local_Hyp list * simple_Goal list
-
-let parse_proof_Obligation =
-  function
-  | Element ("Proof_Obligation", args, x::children) ->
-     let s =
-       begin
-         match x with
-         | Element("Tag", args, [Text(s)]) -> s
-         | x -> parse_fail x
-       end in
-     let d =
-       take "Definition" children
-       |> List.map @@
-            function
-            | Element (_,args,_) -> List.assoc "name" args
-            | x -> parse_fail x
-     in
-     let h =
-       take "Hypothesis" children
-       |> List.map @@
-            function
-            | Element (_,_,[x]) -> parse_pred_group x
-            | x -> parse_fail x
-     in
-     let lh =
-       take "Local_Hyp" children
-       |> List.map parse_local_hyp
-     in
-     let sg =
-       take "Simple_Goal" children
-       |> List.map parse_simple_goal
-     in
-     PO (s, d, h, lh, sg)
-  | x -> parse_fail x
-
-type typeInfos = TI of (int * type_group) list
-
-let parse_typeInfos =
-  function
-  | Element ("TypeInfos",args,children) ->
-     let c = children
-             |> List.map @@
-                  function
-                  | Element ("Type", args, [x]) ->
-                     let i = int_of_string @@ List.assoc "id" args in
-                     let t = parse_type_group x in
-                     i, t
-                  | x -> parse_fail x
-     in
-     TI c
-  | x -> parse_fail x
-
-type proof_Obligations = POs of define list * proof_Obligation list * typeInfos option
-
-let parse_proof_Obligations =
+         let id_set = Hashtbl.create 128 in
+         children |> List.iter @@
+                       function
+                       | Element ("Type", args, [x]) ->
+                          let i = int_of_string @@ List.assoc "id" args in
+                          let t = parse_type_group hd id_set x in
+                          Hashtbl.add ti i t
+                       | x -> parse_fail x
+       end
+    | x -> parse_fail x
+  in
   function
   | Element ("Proof_Obligations", args, children) ->
-     let d = List.map parse_define @@ take "Define" children in
-     let po = List.map parse_proof_Obligation @@ take "Proof_Obligation" children in
-     let ti = List.map parse_typeInfos @@ take "TypeInfos" children in
-     POs (d, po, match ti with [] -> None | x :: _ -> Some x)
+     begin
+       Queue.add Syntax.requireme hd;
+       List.iter iter children;
+       { definitions = d; obligations = o; type_infos = ti; header = List.of_seq (Queue.to_seq hd) }
+     end
   | x -> parse_fail x
+
+let parse_variables ti =
+  let foo =
+    function
+    | Element ("Id", args, []) ->
+       let n = List.assoc "typref" args |> int_of_string in
+       let id = List.assoc "value" args in
+       let a = List.assoc_opt "suffix" args in
+       Lp.Uid(object_name id a), tau (Hashtbl.find ti n)
+    | x -> parse_fail x
+  in List.map foo
+
+(* hack for emptyset and emptyseq *)
+let unset =
+  function
+  | Lp.App (_,[(false,x)]) -> x
+  | _ -> assert false
+
+let rec parse_pred ti =
+  let parse_exp x = parse_exp ti x in
+  let parse_pred x = parse_pred ti x in
+  let parse_variables x = parse_variables ti x in
+  function
+  | Element ("Binary_Pred", args, [x;y]) ->
+     let op = List.assoc "op" args |> binary_op in
+     let c1 = parse_pred x in
+     let c2 = parse_pred y in
+     op c1 c2
+  | Element ("Exp_Comparison", args, [x;y]) ->
+     let op = List.assoc "op" args |> binary_op in
+     let c1 = parse_exp x in
+     let c2 = parse_exp y in
+     op c1 c2
+  | Element ("Quantified_Pred", args, [Element ("Variables", _, v);Element ("Body", _, [b])]) ->
+     let op = List.assoc "type" args |> quantified_pred_op in
+     let v = parse_variables v in
+     let p = parse_pred b in
+     op v p
+  | Element ("Unary_Pred", args, [x]) as err ->
+     let () = if List.assoc "op" args <> "not" then parse_fail err in (* for debugging *)
+     not (parse_pred x)
+  | Element ("Nary_Pred", args, children) ->
+     let op = List.assoc "op" args |> nary_op in
+     let l = List.map parse_pred children in
+     op l
+  | x -> parse_fail x
+and parse_exp ti =
+  let parse_exp x = parse_exp ti x in
+  let parse_pred x = parse_pred ti x in
+  let parse_variables x = parse_variables ti x in
+  let parse_record_item =
+    function
+    | Element ("Record_Item", args, [x]) ->
+       let label = List.assoc "label" args in
+       let c = parse_exp x in
+       (label, c)
+    | x -> parse_fail x
+  in
+  function
+  | Element ("Unary_Exp", args, [x]) ->
+     let op = List.assoc "op" args |> unary_op in
+     let c = parse_exp x in
+     op c
+  | Element ("Binary_Exp", args, [x;y]) ->
+     let op = List.assoc "op" args |> binary_op in
+     let c1 = parse_exp x in
+     let c2 = parse_exp y in
+     op c1 c2
+  | Element ("Ternary_Exp", args, [x;y;z]) ->
+     let op = List.assoc "op" args |> ternary_op in
+     let c1 = parse_exp x in
+     let c2 = parse_exp y in
+     let c3 = parse_exp z in
+     op c1 c2 c3
+  | Element ("Nary_Exp", args, children) ->
+     let op = List.assoc "op" args |> nary_op in
+     let c = List.map parse_exp children in
+     op c
+  | Element ("Boolean_Literal", args, _) ->
+     begin
+       match List.assoc "value" args with
+       | "TRUE" -> trueb
+       | "FALSE" -> falseb
+       | _ -> failwith "wrong Boolean literal"
+     end
+  | Element ("Boolean_Exp", _, [x]) ->
+     let c = parse_pred x in
+     boolean_exp c
+  | Element ("EmptySet", args, _) ->
+     let t = List.assoc "typref" args |> int_of_string in
+     emptyset (unset (Hashtbl.find ti t))
+  | Element ("EmptySeq", args, children) ->
+     let t = List.assoc "typref" args |> int_of_string in
+     emptyseq (unset (Hashtbl.find ti t))
+  | Element ("Id", args, children) ->
+     let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+     let id = List.assoc "value" args in
+     let a = List.assoc_opt "suffix" args in
+     let name = object_name id a in
+     begin
+       env#add name t None;
+       lp_id name
+     end
+  | Element ("Integer_Literal", args, children) ->
+     let v = List.assoc "value" args in
+     begin
+       env#add v z_t (Some (int v));
+       lp_id v
+     end
+  | Element ("Quantified_Exp", args, [Element ("Variables", _, children);Element ("Pred", _, [p]);Element ("Body", _, [b])]) ->
+     let op = List.assoc "type" args |> quantified_exp_op in
+     let v = parse_variables children in
+     let p = parse_pred p in
+     let b = parse_exp b in
+     op v p b
+  | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
+     let v = List.map (fun (x,y) -> x, Some y) @@ parse_variables children in
+     let b = Lp.Binder(Lp.Uid "λ", v, parse_pred b) in
+     comprehension b
+  | Element ("STRING_Literal", args, children) as z ->
+     let v = List.assoc "value" args in parse_fail z
+  | Element ("Struct", args, children) as z ->
+     let c = List.map parse_record_item children in parse_fail z
+  | Element ("Record", args, children) as z ->
+     let c = List.map parse_record_item children in parse_fail z
+  | Element ("Real_Literal", args, children) as z ->
+     let v = List.assoc "value" args in parse_fail z
+  | Element ("Record_Update", args, [x;y]) as z ->
+     let c1 = parse_exp x in
+     let label = List.assoc "label" args in
+     let c2 = parse_exp y in
+     parse_fail z
+  | Element ("Record_Field_Access", args, [x]) as z ->
+     let typref = int_of_string @@ List.assoc "typref" args in
+     let c = parse_exp x in
+     let label = List.assoc "label" args in
+     parse_fail z
+  | x -> parse_fail x
+
+let new_axiom out ti a =
+  let name = string_of_int counter#get |> axiom_name in
+  let term = parse_pred ti a in
+  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some (thm term), None)
+
+let parse_hyp out ti a num =
+  let name = hyp_name num in
+  let term = parse_pred ti a in
+  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some u, Some term)
+
+let parse_goal out ti l =
+  let rec foo =
+    function
+    | Element ("Tag", _, [Text(s)]) :: l->
+       begin
+         Lp.print out Lp.Newline;
+         Lp.print out @@ Lp.Comment s;
+         Lp.print out Lp.Newline;
+         foo l
+       end
+    | Element ("Ref_Hyp", args, _) :: l ->
+       let f = List.assoc "num" args |> hyp_name |> lp_id |> tau |> imply in
+       foo l |> f
+    | [Element ("Goal", _, [x])]->
+       parse_pred ti x
+    | x :: l -> parse_fail x
+    | _ -> assert false
+  in
+  let name = string_of_int counter'#get |> goal_name in
+  let term = foo l in
+  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some u, Some term)
+
+let parse_id out ti =
+  function
+  | Element ("Id", args, []) ->
+     let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+     let v = List.assoc "value" args in
+     let s = List.assoc_opt "suffix" args in
+     let name = object_name v s in
+     begin
+       env#add name t None;
+       lp_id name
+     end
+  | x -> parse_fail x
+
+let parse_set out ti name t =
+  function
+  | [Element ("Enumerated_Values", _, children)] ->
+     let l = List.map (parse_id out ti) children in
+     env#add name t (Some (extension (to_list l)))
+  | [] -> env#add name t None
+
+
+let parse_def out ti l =
+  let foo = function
+    | Element ("Set", _, Element("Id", args,[]) :: l) ->
+       let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+       let v = List.assoc "value" args in
+       let s = List.assoc_opt "suffix" args in
+       let name = object_name v s in
+       parse_set out ti name t l
+    | Element (_, args,_) as a ->
+       new_axiom out ti a
+    | x -> parse_fail x
+  in
+  List.iter foo l
+
+let parse_po pog =
+  function
+  | Element("Tag", _, [Text(s)]) :: l ->
+     begin
+       let out = Out_channel.open_text (s ^ ".lp") in
+       let parse_po' =
+         function
+         | Element("Definition", args, []) ->
+            List.assoc "name" args
+            |> Hashtbl.find pog.definitions
+            |> parse_def out pog.type_infos
+         | Element("Hypothesis", _, [x]) ->
+            print_endline "hypothesis" (* new_axiom out pog.type_infos x *)
+         | Element("Local_Hyp", args, [x]) ->
+            print_endline "local_hyp" (* List.assoc "num" args
+            |> parse_hyp out pog.type_infos x *)
+         | Element("Simple_Goal", _, l) ->
+            print_endline "simple_goal" (* parse_goal out pog.type_infos l *)
+       in
+       List.iter (Lp.print out) pog.header;
+       counter#init;
+       counter'#init;
+       env#init out;
+       List.iter parse_po' l;
+       Out_channel.close out
+     end
+  | _ -> assert false
+
+(* Convert the whole XML file into an ast, kept in memory (consumes lot of memory if the XML is big) *)
+let file_to_tree s =
+  let open Markup in
+  let input, close = file s in
+  let output =
+    input |> parse_xml |> signals |> trim |>
+      tree
+        ~text:(fun l -> Text(String.trim @@ String.concat "" l))
+        ~element:(fun (_, name) l children -> Element (name, List.map (fun ((_,x),y) -> (x,y)) l, children)) |>
+      function
+      | Some x -> x
+      | None -> failwith "Not an XML file"
+  in close (); output
+
+let predefined_sets = ["BOOL"; "INTEGER"; "REAL"; "FLOAT"; "STRING"]

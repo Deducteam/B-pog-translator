@@ -45,7 +45,7 @@ let string2int s =
   | '0' -> "0"
   | '-' -> "Zneg (" ^ (bin2string @@ dec_2_bin_rev @@ List.tl @@ foo s) ^ ")"
   | _ -> "Zpos (" ^ (bin2string @@ dec_2_bin_rev @@ foo s) ^ ")"
-
+o
 let rec print_type_group =
   function
   | Product (t1, t2) -> "(" ^ print_type_group t1 ^ ") * (" ^ print_type_group t2 ^ ")"

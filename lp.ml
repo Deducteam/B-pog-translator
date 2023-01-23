@@ -1,9 +1,3 @@
-(* Context:
-   priority of symbols
-   are symbols infix
-   are symbols binders
- *)
-
 type level = (float, int) Either.t
 
 let level_to_string =
@@ -137,6 +131,7 @@ let modifier_to_string =
 
 type command =
   | Comment of string
+  | Newline
   | Dependency of bool (* require? *) * bool (* open? *) * id
   | Symbol of modifier list * id * term option * term option
   | Rule of term * term
@@ -146,6 +141,7 @@ type command =
 let command_to_string =
   function
   | Comment s -> "/* " ^ s ^ " */"
+  | Newline -> "\n"
   | Dependency (b1, b2, i) ->
      let s1 = if b1 then "require " else "" in
      let s2 = if b2 then "open " else "" in
@@ -161,13 +157,9 @@ let command_to_string =
      let s4 = match t2 with
        | Some t -> " ≔ " ^ term_to_string t
        | None -> ""
-     in s1 ^ s2 ^ s3 ^ s4 ^ ";\n"
+     in s1 ^ "symbol " ^ s2 ^ s3 ^ s4 ^ ";\n"
   | Rule (t1, t2) ->
      "rule " ^ term_to_string t1 ^ " ↪ " ^ term_to_string t2 ^ ";\n"
   | Notation (i, n) -> "notation " ^ id_to_string i ^ notation_to_string n ^ ";\n"
 
-(* lambdapi code *)
-type lp = command list
-
-(* directly print to a channel *)
-let print_lp out lp = List.iter (fun c -> Out_channel.output_string out (command_to_string c)) lp
+let print out c = Out_channel.output_string out @@ command_to_string c
