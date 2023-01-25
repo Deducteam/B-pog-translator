@@ -35,8 +35,6 @@ let () =
       end
   end
 
-let ( >> ) f g x = g (f x)
-
 let pog = !input |> file_to_tree |> parse_pog
 
 let print_pkg () =

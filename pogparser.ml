@@ -72,6 +72,10 @@ let env =
           Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, Some (tau t), y);
           Hashtbl.add s x ()
         end
+
+    method tmp x = Hashtbl.add s x ()
+
+    method rem x = Hashtbl.remove s x
   end
 
 type ast = Element of string * (string * string) list * ast list | Text of string
@@ -97,6 +101,13 @@ let rec to_record =
   | [] -> assert false
   | [x,y] -> record_nil x y
   | (x,y) :: l -> record_cons x y (to_record l)
+
+let rec accessible_proof label =
+  function
+  | Lp.App(Lp.Id (Lp.Uid "struct_nil"), [(false, x); (false, y)]) -> accessible_nil ()
+  | Lp.App(Lp.Id (Lp.Uid "struct_cons"), [(false, x); (false, y); (false, z)]) -> if x = label then accessible_cons () else skip (accessible_proof label z)
+  | Lp.App(Lp.Id (Lp.Uid "struct_T"), [(false, x)]) -> accessible_proof label x
+  | _ -> failwith "accessible_proof"
 
 let parse_type_group hd id_set =
   let id_check s =
@@ -177,10 +188,21 @@ let parse_variables ti =
     | Element ("Id", args, []) ->
        let n = List.assoc "typref" args |> int_of_string in
        let id = List.assoc "value" args in
-       let a = List.assoc_opt "suffix" args in
-       Lp.Uid(object_name id a), Hashtbl.find ti n
+       let name = List.assoc_opt "suffix" args |> object_name id in
+       env#tmp name;
+       Lp.Uid name, Hashtbl.find ti n
     | x -> parse_fail x
   in List.map foo
+
+let rem_variables =
+  let foo =
+    function
+    | Element ("Id", args, []) ->
+       let id = List.assoc "value" args in
+       let name = List.assoc_opt "suffix" args |> object_name id in
+       env#rem name
+    | x -> parse_fail x
+  in List.iter foo
 
 (* hack for emptyset and emptyseq *)
 let unset =
@@ -203,10 +225,11 @@ let rec parse_pred ti =
      let c1 = parse_exp x in
      let c2 = parse_exp y in
      op c1 c2
-  | Element ("Quantified_Pred", args, [Element ("Variables", _, v);Element ("Body", _, [b])]) ->
+  | Element ("Quantified_Pred", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
      let op = List.assoc "type" args |> quantified_pred_op in
-     let v = parse_variables v in
+     let v = parse_variables children in
      let p = parse_pred b in
+     let () = rem_variables children in
      op v p
   | Element ("Unary_Pred", args, [x]) as err ->
      let () = if List.assoc "op" args <> "not" then parse_fail err in (* for debugging *)
@@ -284,12 +307,14 @@ and parse_exp ti =
      let v = parse_variables children in
      let p = parse_pred p in
      let b = parse_exp b in
+     let () = rem_variables children in
      op v p b
   | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
      let v = parse_variables children  in
      let h = helper v in
      let v = List.map (fun (x,y) -> x, Some (tau y)) v in
      let b = Lp.Binder(Lp.Uid "λ", v, parse_pred b) in
+     let () = rem_variables children in
      comprehension h b
   | Element ("STRING_Literal", args, children) ->
      let v = List.assoc "value" args in
@@ -310,18 +335,19 @@ and parse_exp ti =
        env#add v r_t None;
        lp_id v
      end
-  | Element ("Record_Update", args, [x;y]) as z ->
-     let c1 = parse_exp x in
-     let label = List.assoc "label" args in
-     let c2 = parse_exp y in
-     print_endline "record_update";
-     parse_fail z
-  | Element ("Record_Field_Access", args, [x]) as z ->
-     let typref = int_of_string @@ List.assoc "typref" args in
+  | Element ("Record_Update", args, [x;y]) ->
+     let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
      let c = parse_exp x in
-     let label = List.assoc "label" args in
-     print_endline "record_field_access";
-     parse_fail z
+     let v = parse_exp y in
+     let label = List.assoc "label" args |> label_name |> lp_id in
+     let p = accessible_proof label t in
+     record_update c label v p
+  | Element ("Record_Field_Access", args, [Element(_, args', _) as x]) ->
+     let t = List.assoc "typref" args' |> int_of_string |> Hashtbl.find ti in
+     let c = parse_exp x in
+     let label = List.assoc "label" args |> label_name |> lp_id in
+     let p = accessible_proof label t in
+     record_field_access c label p
   | x -> parse_fail x
 
 let new_axiom out ti a =
@@ -347,8 +373,9 @@ let parse_goal out ti l =
     | Element ("Ref_Hyp", args, _) :: l ->
        let f = List.assoc "num" args |> hyp_name |> lp_id |> imply in
        foo l |> f
-    | [Element ("Goal", _, [x])]->
+    | Element ("Goal", _, [x]) :: _ ->
        parse_pred ti x
+    | Element ("Proof_State", _, _) :: l -> foo l
     | x :: l -> parse_fail x
     | _ -> assert false
   in

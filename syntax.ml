@@ -72,7 +72,7 @@ let falseu = lp_id "FALSE"
 let imply = binary_op 1 (Some false) "⇒"
 let equiv = binary_op 2 (Some false) "⇔"
 let disj = binary_op 3 (Some false) "∨"
-let conj = binary_op 4 (Some false) "∧"
+let conj x y = app (lp_id "∧") [(false, x); (false, y)] (* binary_op 4 (Some false) "∧" *)
 let not x = app (lp_id "¬") [(false, x)]
 
 let forall x t body =
@@ -240,4 +240,4 @@ let zneg x = app (lp_id "Zneg") [(false, x)]
 let struct_exp x = app (lp_id "struct") [(false, x)]
 let record x = app (lp_id "record") [(false, x)]
 let record_update x y z t = app (lp_id "record") [(false, x); (false, y); (false, z); (false, t)]
-let record_field_access x y z = app (lp_id "record") [(false, x); (false, y); (false, z)]
+let record_field_access x y z = app (lp_id "record_field_access") [(false, x); (false, y); (false, z)]

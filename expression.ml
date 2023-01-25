@@ -71,8 +71,8 @@ let unary_op =
   | "ran" -> ran
   | "POW" -> pow
   | "POW1" -> pow1
-  | "fin" -> fin
-  | "fin1" -> fin1
+  | "FIN" -> fin
+  | "FIN1" -> fin1
   | "union" -> union_gen
   | "inter" -> inter_gen
   | "seq" -> seq
