@@ -211,6 +211,10 @@ let unset =
   function
   | Lp.App (_,[(false,x)]) -> x
   | _ -> assert false
+let unseq =
+  function
+  | Lp.App (_,[(false,Lp.Infixapp (_, _, Lp.Id (Lp.Uid "Z_T"), Lp.Uid "*", x))]) -> x
+  | _ -> assert false
 
 let rec parse_pred ti =
   let parse_exp x = parse_exp ti x in
@@ -288,7 +292,7 @@ and parse_exp ti =
      emptyset (unset (Hashtbl.find ti t))
   | Element ("EmptySeq", args, children) ->
      let t = List.assoc "typref" args |> int_of_string in
-     emptyseq (unset (Hashtbl.find ti t))
+     emptyseq (unseq (Hashtbl.find ti t))
   | Element ("Id", args, children) ->
      let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
      let id = List.assoc "value" args in
