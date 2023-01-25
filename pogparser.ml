@@ -138,9 +138,11 @@ let parse_type_group hd id_set =
          | "FLOAT" -> float_t
          | "BOOL" -> bool_t
          | "STRING" -> string_t
-         | s ->
-            id_check (type_name s);
-            lp_id s
+         | s -> let s = (type_name s) in
+                begin
+                  id_check s;
+                  lp_id s |> type_t
+                end
        end
     | Element ("Unary_Exp", args, [x]) -> set (foo x)
     | Element ("Struct", args, children) ->
