@@ -51,7 +51,6 @@ let int n =
   | '-' -> zneg (bin2string @@ dec_2_bin_rev @@ List.tl @@ helper n)
   | _ -> zpos (bin2string @@ dec_2_bin_rev @@ helper n)
 
-(* TODO: lists *)
 let to_list x = List.fold_right cons x (nil ())
 
 let rec my_fold f o =
@@ -113,6 +112,8 @@ let unary_op =
   | "infix" -> infix_tree
   | "bin" -> bin_unary
   | x -> failwith ("Invalid unary expression : " ^ x)
+
+let default x y = trueu
 
 let binary_op =
   function
@@ -212,8 +213,8 @@ let nary_op =
 
 let quantified_pred_op s args body =
   match s with
-  | "!" -> List.fold_left (fun x (i,t) -> forall i (tau t) x) body args
-  | "#" -> List.fold_left (fun x (i,t) -> exists i (tau t) x) body args
+  | "!" -> List.fold_left (fun x (i,t) -> forall i t x) body args
+  | "#" -> List.fold_left (fun x (i,t) -> exists i t x) body args
   | x -> failwith ("Invalid predicate quantifier : " ^ x)
 
 let rec helper =

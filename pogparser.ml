@@ -308,6 +308,7 @@ and parse_exp ti =
      let p = parse_pred p in
      let b = parse_exp b in
      let () = rem_variables children in
+     (* let t = List.assoc "typref" args |> int_of_string in emptyset (unset (Hashtbl.find ti t)) (* TODO remove *) *)
      op v p b
   | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
      let v = parse_variables children  in
