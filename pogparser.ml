@@ -28,10 +28,10 @@ let type_name x = "t_" ^ x
 let string_name x = "s_" ^ (sanitizestring x)
 let axiom_name x = "a_" ^ x
 let constants = ["INTEGER"; "REAL"; "FLOAT"; "BOOL"; "STRING"; "0"]
-let object_name x =
+let object_name x t =
   function
-  | None -> if List.mem x constants then x else "o_" ^ x
-  | Some s -> "o_" ^ x ^ "'" ^ s
+  | None -> if List.mem x constants then x else "o_" ^ x ^ "_" ^ t
+  | Some s -> "o_" ^ x ^ "'" ^ s ^ "_" ^ t
 let hyp_name x = "h_" ^ x
 let goal_name x = "g_" ^ x
 
@@ -53,29 +53,41 @@ let counter' = new counter
 let env =
   object
     val s = Hashtbl.create 512
+    val hyp_var = Hashtbl.create 512
     val mutable o = stdout
+    val mutable is_hyp = false
 
     method init out =
       begin
         o <- out;
-        Hashtbl.clear s
+        Hashtbl.clear s;
+        Hashtbl.clear hyp_var
       end
 
-    method add x t y =
+    method add ?(is_cst=false) x t y =
       if Stdlib.not (Hashtbl.mem s x || List.mem x constants) then
-        let opt =
-          match y with
-          | Some _ -> []
-          | None -> [Lp.Constant]
-        in
-        begin
-          Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, Some (tau t), y);
-          Hashtbl.add s x ()
-        end
+        if is_hyp && Stdlib.not (is_cst) then Hashtbl.replace hyp_var x t else
+          let opt =
+            match y with
+            | Some _ -> []
+            | None -> [Lp.Constant]
+          in
+          begin
+            Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, [], Some (tau t), y);
+            Hashtbl.add s x ()
+          end
 
     method tmp x = Hashtbl.add s x ()
 
+    method get_hyp_var =
+      begin
+        let args = Hashtbl.fold (fun x tx args -> ((Lp.Uid x, tx) :: args)) hyp_var [] in
+        Hashtbl.clear hyp_var; args
+      end
+
     method rem x = Hashtbl.remove s x
+
+    method flip_hyp = () (* is_hyp <- Stdlib.not (is_hyp) *)
   end
 
 type ast = Element of string * (string * string) list * ast list | Text of string
@@ -86,6 +98,7 @@ type pog =
   {
     definitions : (string, ast list) Hashtbl.t;
     obligations : (ast list) Queue.t;
+    hypotheses : (string, (Lp.id * Lp.term) list) Hashtbl.t;
     type_infos : (int, Lp.term) Hashtbl.t;
     header : Lp.command list
   }
@@ -113,7 +126,7 @@ let parse_type_group hd id_set =
   let id_check s =
     if Stdlib.not (Hashtbl.mem id_set s) then
       begin
-        Queue.add (Lp.Symbol ([Lp.Constant], Lp.Uid s, Some id, None)) hd;
+        Queue.add (Lp.Symbol ([Lp.Constant], Lp.Uid s, [], Some id, None)) hd;
         Hashtbl.add id_set s ()
       end
   in
@@ -157,6 +170,7 @@ let parse_pog =
   let d = Hashtbl.create (List.length possible_contexts) in
   let o = Queue.create () in
   let ti = Hashtbl.create 128 in
+  let hp = Hashtbl.create 128 in
   let hd = Queue.create () in
   let iter =
     function
@@ -180,7 +194,7 @@ let parse_pog =
      begin
        Queue.add Syntax.requireme hd;
        List.iter iter children;
-       { definitions = d; obligations = o; type_infos = ti; header = List.of_seq (Queue.to_seq hd) }
+       { definitions = d; obligations = o; hypotheses = hp; type_infos = ti; header = List.of_seq (Queue.to_seq hd) }
      end
   | x -> parse_fail x
 
@@ -188,9 +202,10 @@ let parse_variables ti =
   let foo =
     function
     | Element ("Id", args, []) ->
-       let n = List.assoc "typref" args |> int_of_string in
+       let o = List.assoc "typref" args in
+       let n = o |> int_of_string in
        let id = List.assoc "value" args in
-       let name = List.assoc_opt "suffix" args |> object_name id in
+       let name = List.assoc_opt "suffix" args |> object_name id o in
        env#tmp name;
        Lp.Uid name, Hashtbl.find ti n
     | x -> parse_fail x
@@ -200,8 +215,9 @@ let rem_variables =
   let foo =
     function
     | Element ("Id", args, []) ->
+       let o = List.assoc "typref" args in
        let id = List.assoc "value" args in
-       let name = List.assoc_opt "suffix" args |> object_name id in
+       let name = List.assoc_opt "suffix" args |> object_name id o in
        env#rem name
     | x -> parse_fail x
   in List.iter foo
@@ -294,10 +310,11 @@ and parse_exp ti =
      let t = List.assoc "typref" args |> int_of_string in
      emptyseq (unseq (Hashtbl.find ti t))
   | Element ("Id", args, children) ->
-     let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+     let o = List.assoc "typref" args in
+     let t = o |> int_of_string |> Hashtbl.find ti in
      let id = List.assoc "value" args in
      let a = List.assoc_opt "suffix" args in
-     let name = object_name id a in
+     let name = object_name id o a in
      begin
        env#add name t None;
        lp_id name
@@ -305,7 +322,7 @@ and parse_exp ti =
   | Element ("Integer_Literal", args, children) ->
      let v = List.assoc "value" args in
      begin
-       env#add v z_t (Some (int v));
+       env#add ~is_cst:true v z_t (Some (int v));
        lp_id v
      end
   | Element ("Quantified_Exp", args, [Element ("Variables", _, children);Element ("Pred", _, [p]);Element ("Body", _, [b])]) ->
@@ -328,7 +345,7 @@ and parse_exp ti =
      let v = string_name v in
      begin
        print_endline "Warning: strings are not fully supported.";
-       env#add v string_t None;
+       env#add ~is_cst:true v string_t None;
        lp_id v
      end
   | Element ("Struct", args, children) ->
@@ -339,7 +356,7 @@ and parse_exp ti =
      let v = List.assoc "value" args in
      begin
        print_endline "Warning: reals are not fully supported.";
-       env#add v r_t None;
+       env#add ~is_cst:true v r_t None;
        lp_id v
      end
   | Element ("Record_Update", args, [x;y]) ->
@@ -360,14 +377,21 @@ and parse_exp ti =
 let new_axiom out ti a =
   let name = string_of_int counter#get |> axiom_name in
   let term = parse_pred ti a in
-  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, Some (thm term), None)
+  Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, [], Some (thm term), None)
 
-let parse_hyp out ti a num =
+let parse_hyp out ti hp a num =
+  let () = env#flip_hyp in
   let name = hyp_name num in
   let term = parse_pred ti a in
-  Lp.print out @@ Lp.Symbol([], Lp.Uid name, Some u, Some term)
+  let () = env#flip_hyp in
+  let args = env#get_hyp_var in
+  begin
+    Hashtbl.add hp num args;
+    Lp.print out @@ Lp.Symbol([], Lp.Uid name, List.map (fun (x,t) -> x, Some (tau t)) args, Some u, Some term)
+  end
 
-let parse_goal out ti l =
+let parse_goal out ti hp l =
+  let vars = Hashtbl.create 512 in
   let rec foo =
     function
     | Element ("Tag", _, [Text(s)]) :: l->
@@ -378,8 +402,14 @@ let parse_goal out ti l =
          foo l
        end
     | Element ("Ref_Hyp", args, _) :: l ->
-       let f = List.assoc "num" args |> hyp_name |> lp_id |> imply in
-       foo l |> f
+       let n = List.assoc "num" args in
+       let h = n |> hyp_name |> lp_id in
+       let args = Hashtbl.find hp n in
+       let f = imply (app h (List.map (fun (x,_) -> (false, Lp.Id x)) args)) in
+       begin
+         List.iter (fun (x,t) -> Hashtbl.replace vars x t) args;
+         foo l |> f
+       end
     | Element ("Goal", _, [x]) :: _ ->
        parse_pred ti x
     | Element ("Proof_State", _, _) :: l -> foo l
@@ -388,15 +418,17 @@ let parse_goal out ti l =
   in
   let name = string_of_int counter'#get |> goal_name in
   let term = foo l in
-  Lp.print out @@ Lp.Symbol([], Lp.Uid name, Some u, Some term)
+  let term = Hashtbl.fold (fun x t term -> forall x t term) vars term in
+  Lp.print out @@ Lp.Symbol([], Lp.Uid name, [], Some u, Some term)
 
 let parse_id out ti =
   function
   | Element ("Id", args, []) ->
-     let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+     let o = List.assoc "typref" args in
+     let t = o |> int_of_string |> Hashtbl.find ti in
      let v = List.assoc "value" args in
      let s = List.assoc_opt "suffix" args in
-     let name = object_name v s in
+     let name = object_name v o s in
      begin
        env#add name t None;
        lp_id name
@@ -415,10 +447,11 @@ let parse_set out ti name t =
 let parse_def out ti l =
   let foo = function
     | Element ("Set", _, Element("Id", args,[]) :: l) ->
-       let t = List.assoc "typref" args |> int_of_string |> Hashtbl.find ti in
+       let o = List.assoc "typref" args in
+       let t = o |> int_of_string |> Hashtbl.find ti in
        let v = List.assoc "value" args in
        let s = List.assoc_opt "suffix" args in
-       let name = object_name v s in
+       let name = object_name v o s in
        parse_set out ti name t l
     | Element (_, args,_) as a ->
        new_axiom out ti a
@@ -441,9 +474,9 @@ let parse_po pog =
             new_axiom out pog.type_infos x
          | Element("Local_Hyp", args, [x]) ->
             List.assoc "num" args
-            |> parse_hyp out pog.type_infos x
+            |> parse_hyp out pog.type_infos pog.hypotheses x
          | Element("Simple_Goal", _, l) ->
-            parse_goal out pog.type_infos l
+            parse_goal out pog.type_infos pog.hypotheses l
          | x -> parse_fail x
        in
        List.iter (Lp.print out) pog.header;

@@ -47,7 +47,7 @@ let cmp_priority p1 p2 =
 
 let term_to_string t =
   let rec aux ?(assoc = false) prior =
-    let rec arg_to_string s =
+    let arg_to_string s =
       function
       | id, None -> s ^ " " ^ id_to_string id
       | id, Some t -> s ^ " (" ^ id_to_string id ^ " : " ^ aux FunPriority t ^ ")"
@@ -80,7 +80,12 @@ let term_to_string t =
   | Postfixapp (l, t, i) ->
      let l = FixPriority l in
      p l (aux l t ^ " " ^ id_to_string i)
-  | App (t, l) -> p AppPriority (aux AppPriority t ^ (List.fold_left app_to_string "" l))
+  | App (t, l) ->
+     begin
+       match l with
+         | [] -> aux ~assoc prior t
+         | _ -> p AppPriority (aux AppPriority t ^ (List.fold_left app_to_string "" l))
+     end
   | Id i -> id_to_string i
   | Underscore -> "_"
   | Meta (i, l) -> "?" ^ (id_to_string i) ^ "[" ^ (String.concat "; " (List.map (aux FunPriority) l)) ^ "]"
@@ -133,12 +138,17 @@ type command =
   | Comment of string
   | Newline
   | Dependency of bool (* require? *) * bool (* open? *) * id
-  | Symbol of modifier list * id * term option * term option
+  | Symbol of modifier list * id * (id * term option) list * term option * term option
   | Rule of term * term
   | Notation of id * notation
 (* I won't do builtins, inductives, unif_rule, coerce_rule, or queries *)
 
 let command_to_string =
+  let arg_to_string s =
+    function
+    | id, None -> s ^ " " ^ id_to_string id
+    | id, Some t -> s ^ " (" ^ id_to_string id ^ " : " ^ term_to_string t ^ ")"
+  in
   function
   | Comment s -> "/* " ^ s ^ " */"
   | Newline -> "\n"
@@ -147,17 +157,18 @@ let command_to_string =
      let s2 = if b2 then "open " else "" in
      let s3 = id_to_string i in
      s1 ^ s2 ^ s3 ^ ";\n"
-  | Symbol (l, i, t1, t2) ->
+  | Symbol (l, i, args, t1, t2) ->
      let s1 = String.concat "" (List.map modifier_to_string l) in
      let s2 = id_to_string i in
-     let s3 = match t1 with
+     let s3 = List.fold_left arg_to_string "" args in
+     let s4 = match t1 with
        | Some t -> " : " ^ term_to_string t
        | None -> ""
      in
-     let s4 = match t2 with
+     let s5 = match t2 with
        | Some t -> " ≔ " ^ term_to_string t
        | None -> ""
-     in s1 ^ "symbol " ^ s2 ^ s3 ^ s4 ^ ";\n"
+     in s1 ^ "symbol " ^ s2 ^ s3 ^ s4 ^ s5 ^ ";\n"
   | Rule (t1, t2) ->
      "rule " ^ term_to_string t1 ^ " ↪ " ^ term_to_string t2 ^ ";\n"
   | Notation (i, n) -> "notation " ^ id_to_string i ^ notation_to_string n ^ ";\n"

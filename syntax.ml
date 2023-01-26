@@ -9,6 +9,9 @@ let binary_op level is_left name x y = Lp.Infixapp (Either.Right level, is_left,
 let app x l = Lp.App(x,l)
 let lp_id x = Lp.Id (Lp.Uid x)
 
+let arrow = binary_op (-32767) (Some false) "→"
+let func x t body = Lp.Binder(Lp.Uid "λ", [(x,Some t)], body)
+
 let requireme = Lp.Dependency (true, true, Qid("B", Uid("syntax")))
 
 (* let binary_op level is_left name x y = app (lp_id ("(" ^ name ^ ")")) [(false, x); (false, y)] (* TODO remove *) *)
@@ -77,8 +80,8 @@ let disj = binary_op 3 (Some false) "∨"
 let conj = binary_op 4 (Some false) "∧"
 let not x = app (lp_id "¬") [(false, x)]
 
-let forall x t body = app (lp_id "∀") [(true, t); (false,(Lp.Binder(Lp.Uid "λ", [(x,Some (tau t))], body)))] (* TODO Lp.Binder (Lp.Uid "`∀", [(x,Some t)], body) *)
-let exists x t body = app (lp_id "∃") [(true, t); (false,(Lp.Binder(Lp.Uid "λ", [(x,Some (tau t))], body)))] (* TODO Lp.Binder (Lp.Uid "`∃", [(x,Some t)], body) *)
+let forall x t body = app (lp_id "∀") [(true, t); (false,(func x (tau t) body))] (* TODO Lp.Binder (Lp.Uid "`∀", [(x,Some t)], body) *)
+let exists x t body = app (lp_id "∃") [(true, t); (false,(func x (tau t) body))] (* TODO Lp.Binder (Lp.Uid "`∃", [(x,Some t)], body) *)
 
 let belong = binary_op 15 (Some false) "∈"
 let notbelong = binary_op 15 (Some false) "notin"
