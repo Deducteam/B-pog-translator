@@ -50,6 +50,8 @@ class counter =
 let counter = new counter
 let counter' = new counter
 
+let counterfile = new counter
+
 let env =
   object
     val s = Hashtbl.create 512
@@ -66,28 +68,28 @@ let env =
 
     method add ?(is_cst=false) x t y =
       if Stdlib.not (Hashtbl.mem s x || List.mem x constants) then
-        if is_hyp && Stdlib.not (is_cst) then Hashtbl.replace hyp_var x t else
-          let opt =
-            match y with
-            | Some _ -> []
-            | None -> [Lp.Constant]
-          in
-          begin
-            Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, [], Some (tau t), y);
-            Hashtbl.add s x ()
-          end
+        (* if is_hyp && Stdlib.not (is_cst) then Hashtbl.replace hyp_var x t else *)
+        let opt =
+          match y with
+          | Some _ -> []
+          | None -> [Lp.Constant]
+        in
+        begin
+          Lp.print o @@ Lp.Symbol(opt, Lp.Uid x, [], Some (tau t), y);
+          Hashtbl.add s x ()
+        end
 
     method tmp x = Hashtbl.add s x ()
 
-    method get_hyp_var =
+    (* method get_hyp_var =
       begin
         let args = Hashtbl.fold (fun x tx args -> ((Lp.Uid x, tx) :: args)) hyp_var [] in
         Hashtbl.clear hyp_var; args
-      end
+      end *)
 
     method rem x = Hashtbl.remove s x
 
-    method flip_hyp = () (* is_hyp <- Stdlib.not (is_hyp) *)
+   (* method flip_hyp = () (* is_hyp <- Stdlib.not (is_hyp) *) *)
   end
 
 type ast = Element of string * (string * string) list * ast list | Text of string
@@ -379,18 +381,18 @@ let new_axiom out ti a =
   let term = parse_pred ti a in
   Lp.print out @@ Lp.Symbol([Lp.Constant], Lp.Uid name, [], Some (thm term), None)
 
-let parse_hyp out ti hp a num =
-  let () = env#flip_hyp in
+let parse_hyp out ti (* hp *) a num =
+  (* let () = env#flip_hyp in *)
   let name = hyp_name num in
   let term = parse_pred ti a in
-  let () = env#flip_hyp in
-  let args = env#get_hyp_var in
+  (* let () = env#flip_hyp in
+  let args = env#get_hyp_var in *)
   begin
-    Hashtbl.add hp num args;
-    Lp.print out @@ Lp.Symbol([], Lp.Uid name, List.map (fun (x,t) -> x, Some (tau t)) args, Some u, Some term)
+    (* Hashtbl.add hp num args; *)
+    Lp.print out @@ Lp.Symbol([], Lp.Uid name, [] (* List.map (fun (x,t) -> x, Some (tau t)) args *), Some u, Some term)
   end
 
-let parse_goal out ti hp l =
+let parse_goal out ti (* hp *) l =
   let vars = Hashtbl.create 512 in
   let rec foo =
     function
@@ -404,10 +406,10 @@ let parse_goal out ti hp l =
     | Element ("Ref_Hyp", args, _) :: l ->
        let n = List.assoc "num" args in
        let h = n |> hyp_name |> lp_id in
-       let args = Hashtbl.find hp n in
-       let f = imply (app h (List.map (fun (x,_) -> (false, Lp.Id x)) args)) in
+       (* let args = Hashtbl.find hp n in *)
+       let f = imply (* (app *) h (* (List.map (fun (x,_) -> (false, Lp.Id x)) args)) *) in
        begin
-         List.iter (fun (x,t) -> Hashtbl.replace vars x t) args;
+         (* List.iter (fun (x,t) -> Hashtbl.replace vars x t) args; *)
          foo l |> f
        end
     | Element ("Goal", _, [x]) :: _ ->
@@ -463,7 +465,8 @@ let parse_po pog =
   function
   | Element("Tag", _, [Text(s)]) :: l ->
      begin
-       let out = Out_channel.open_text (s ^ ".lp") in
+       let n = counterfile#get |> string_of_int in
+       let out = Out_channel.open_text (s ^ "_" ^ n ^ ".lp") in
        let parse_po' =
          function
          | Element("Definition", args, []) ->
@@ -474,9 +477,9 @@ let parse_po pog =
             new_axiom out pog.type_infos x
          | Element("Local_Hyp", args, [x]) ->
             List.assoc "num" args
-            |> parse_hyp out pog.type_infos pog.hypotheses x
+            |> parse_hyp out pog.type_infos (* pog.hypotheses *) x
          | Element("Simple_Goal", _, l) ->
-            parse_goal out pog.type_infos pog.hypotheses l
+            parse_goal out pog.type_infos (* pog.hypotheses *) l
          | x -> parse_fail x
        in
        List.iter (Lp.print out) pog.header;

@@ -40,7 +40,7 @@ let pog = !input |> file_to_tree |> parse_pog
 let print_pkg () =
   let out = Out_channel.open_text "lambdapi.pkg" in
   Out_channel.output_string out
-    "package_name = Foo\nroot_path    = Foo\n";
+    "package_name = Pog\nroot_path    = Pog\n";
   Out_channel.close out
 
 let () =
