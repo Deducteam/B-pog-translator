@@ -35,13 +35,13 @@ let () =
       end
   end
 
-let pog = !input |> file_to_tree |> parse_pog
-
 let print_pkg () =
   let out = Out_channel.open_text "lambdapi.pkg" in
-  Out_channel.output_string out
-    "package_name = Pog\nroot_path    = Pog\n";
+  Out_channel.output_string out @@
+    "package_name = " ^ package_name ^ "\nroot_path    = " ^ package_name ^ "\n";
   Out_channel.close out
+
+let pog = !input |> file_to_tree
 
 let () =
   if not (Sys.file_exists !output) then
@@ -53,4 +53,4 @@ let () =
     end;
   Sys.chdir !output;
   print_pkg ();
-  Queue.iter (parse_po pog) pog.obligations
+  parse_pog pog
