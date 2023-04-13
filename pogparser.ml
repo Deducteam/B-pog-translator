@@ -17,7 +17,7 @@ let label_name x = "l_" ^ x
 let type_name x = "t_" ^ x
 let string_name x = "s_" ^ (sanitizestring x)
 let axiom_name x = "a_" ^ x
-let int_name x = x ^ "'"
+let int_name x = x
 let constants = ["INTEGER"; "REAL"; "FLOAT"; "BOOL"; "STRING"; int_name "0"]
 let object_name x t =
   function
