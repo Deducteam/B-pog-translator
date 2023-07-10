@@ -95,8 +95,8 @@ let divr = Theory.ns_find_ls realinfix_theory.Theory.th_export ["infix /."]
 let from_int = Theory.ns_find_ls fromint_theory.Theory.th_export ["from_int"]
 
 (* theory Truncate *)
-let floor_real = Theory.ns_find_ls fromint_theory.Theory.th_export ["floor_real"]
-let ceil_real = Theory.ns_find_ls fromint_theory.Theory.th_export ["ceil_real"]
+let floor = Theory.ns_find_ls truncate_theory.Theory.th_export ["floor"]
+let ceil = Theory.ns_find_ls truncate_theory.Theory.th_export ["ceil"]
 
 (* theory Power *)
 let power_int = Theory.ns_find_ls power_theory.Theory.th_export ["power"]
@@ -238,45 +238,46 @@ let my_theory =
   List.fold_left (fun t1 t2 -> use t1 t2) my_theory theories |> ref
 
 let unary_op =
+  let f t x = Term.t_app_infer t [x] in
   function
-  | "imax" -> imax
-  | "rmax" -> rmax
-  | "imin" -> imin
-  | "rmin" -> rmin
-  | "card" -> card
-  | "dom" -> dom
-  | "ran" -> ran
-  | "POW" -> power
-  | "POW1" -> non_empty_power
-  | "FIN" -> finite_subsets
-  | "FIN1" -> non_empty_finite_subsets
-  | "union" -> generalized_union
-  | "inter" -> generalized_inter
-  | "seq" -> seq
-  | "seq1" -> seq1
-  | "iseq" -> iseq
-  | "iseq1" -> iseq1
-  | "-i" -> uminusi
-  | "-r" -> uminusr
-  | "~" -> inverse
-  | "size" -> size
-  | "perm" -> perm
-  | "first" -> first
-  | "last" -> last
-  | "id" -> identity
-  | "closure" -> closure
-  | "closure1" -> closure1
-  | "tail" -> tail
-  | "front" -> front
-  | "rev" -> rev
-  | "conc" -> conc
+  | "imax" -> f imax
+  | "rmax" -> f rmax
+  | "imin" -> f imin
+  | "rmin" -> f rmin
+  | "card" -> f card
+  | "dom" -> f dom
+  | "ran" -> f ran
+  | "POW" -> f power
+  | "POW1" -> f non_empty_power
+  | "FIN" -> f finite_subsets
+  | "FIN1" -> f non_empty_finite_subsets
+  | "union" -> f generalized_union
+  | "inter" -> f generalized_inter
+  | "seq" -> f seq
+  | "seq1" -> f seq1
+  | "iseq" -> f iseq
+  | "iseq1" -> f iseq1
+  | "-i" -> f uminusi
+  | "-r" -> f uminusr
+  | "~" -> f inverse
+  | "size" -> f size
+  | "perm" -> f perm
+  | "first" -> f first
+  | "last" -> f last
+  | "id" -> f identity
+  | "closure" -> f closure
+  | "closure1" -> f closure1
+  | "tail" -> f tail
+  | "front" -> f front
+  | "rev" -> f rev
+  | "conc" -> f conc
   | "succ" -> failwith "TODO function succ (fun x -> x + 1)"
   | "pred" -> failwith "TODO funciton pred (fun x -> x - 1)" (* STOP *)
-  | "rel" -> to_relation
-  | "fnc" -> to_function
-  | "real" -> from_int (* STOP *)
-  | "floor" -> floor_real
-  | "ceiling" -> ceil_real
+  | "rel" -> f to_relation
+  | "fnc" -> f to_function
+  | "real" -> f from_int
+  | "floor" -> f floor
+  | "ceiling" -> f ceil
   | "tree" -> failwith "TODO tree"
   | "btree" -> failwith "TODO btree"
   | "top" -> failwith "TODO top"
@@ -298,7 +299,7 @@ let binary_op =
   | "<=>" -> Term.t_iff
   | ":" -> f mem
   | "/:" -> failwith "TODO not mem"
-  | "<:" -> failwith "TODO included"
+  | "<:" -> f subset
   | "/<:" -> failwith "TODO not included"
   | "<<:" -> failwith "TODO strict included"
   | "/<<:" -> failwith "TODO not strict included"
@@ -388,31 +389,27 @@ let rec my_fold f o =
 
 let nary_op =
   function
-  | "[" -> fun x -> failwith "TODO sequence"
-  | "{" -> fun x -> failwith "TODO extension"
+  | "[" -> fun x -> failwith "should not happen"
+  | "{" -> fun x -> failwith "should not happen"
   | "&" -> my_fold Term.t_and Term.t_true
   | "or" -> my_fold Term.t_or Term.t_false
   | x -> failwith ("Invalid n-ary expression : " ^ x)
 
 let quantified_pred_op s args body =
   match s with
-  | "!" -> List.fold_left (fun x (i,t) -> forall i t x) body args
-  | "#" -> List.fold_left (fun x (i,t) -> exists i t x) body args
+  | "!" -> List.fold_left (fun p v -> Term.t_forall_close [v] [] p) body args
+  | "#" -> List.fold_left (fun p v -> Term.t_exists_close [v] [] p) body args
   | x -> failwith ("Invalid predicate quantifier : " ^ x)
 
 let quantified_exp_op s args b1 b2 =
-  let helper = helper args in
-  let args = List.map (fun (x,y) -> x, Some (tau y)) args in
-  let b1 = Lp.Binder(Lp.Uid "λ", args, b1) in
-  let b2 = Lp.Binder(Lp.Uid "λ", args, b2) in
   begin
     match s with
-    | "%" -> lambda helper
-    | "iSIGMA" -> isigma helper
-    | "rSIGMA" -> rsigma helper
-    | "iPI" -> ipi helper
-    | "rPI" -> rpi helper
-    | "INTER" -> inter' helper
-    | "UNION" -> union' helper
+    | "%" -> failwith "TODO quantified exp"
+    | "iSIGMA" -> failwith "TODO quantified exp"
+    | "rSIGMA" -> failwith "TODO quantified exp"
+    | "iPI" -> failwith "TODO quantified exp"
+    | "rPI" -> failwith "TODO quantified exp"
+    | "INTER" -> failwith "TODO quantified exp"
+    | "UNION" -> failwith "TODO quantified exp"
     | x -> failwith ("Invalid expression quantifier : " ^ x)
-  end b1 b2
+  end

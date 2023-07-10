@@ -1,4 +1,4 @@
-open Pogparser
+open Pog2why
 
 let version_option = "-v"
 let version () =
@@ -36,7 +36,7 @@ let options =
     output_option, Arg.Set_string output, output_doc
   ]
 
-let usage = "Usage: " ^ Sys.argv.(0) ^ " [-v] -a M1 N1 ... -a Mk Nk -i INPUT -o OUTPUT"
+let usage = "Usage: " ^ Sys.argv.(0) ^ " [-v -A] -a M1 N1 ... -a Mk Nk -i INPUT -o OUTPUT"
 
 let () =
   begin
@@ -49,22 +49,9 @@ let () =
       end
   end
 
-let print_pkg () =
-  let out = Out_channel.open_text "lambdapi.pkg" in
-  Out_channel.output_string out @@
-    "package_name = " ^ package_name ^ "\nroot_path    = " ^ package_name ^ "\n";
-  Out_channel.close out
-
 let pog = !input |> file_to_tree
 
 let () =
-  if not (Sys.file_exists !output) then
-    Sys.mkdir !output @@ 7*8*8 + 5*8 + 5;
-  if not (Sys.is_directory !output) then
-    begin
-      prerr_endline (!output ^ " is not a directory.");
-      exit 1
-    end;
-  Sys.chdir !output;
-  print_pkg ();
-  parse_pog pog
+  let choice = if !all_goal then None else Some !goal_list in
+  parse_pog choice pog;
+  printme ()
