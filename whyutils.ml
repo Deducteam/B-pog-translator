@@ -397,14 +397,14 @@ let nary_op =
 
 let quantified_pred_op s args body =
   match s with
-  | "!" -> List.fold_left (fun p v -> Term.t_forall_close [v] [] p) body args
-  | "#" -> List.fold_left (fun p v -> Term.t_exists_close [v] [] p) body args
+  | "!" -> Term.t_forall_close args [] body
+  | "#" -> Term.t_exists_close args [] body
   | x -> failwith ("Invalid predicate quantifier : " ^ x)
 
-let quantified_exp_op s args b1 b2 =
+let quantified_exp_op s =
   begin
     match s with
-    | "%" -> failwith "TODO quantified exp"
+    | "%" -> fun x -> x
     | "iSIGMA" -> failwith "TODO quantified exp"
     | "rSIGMA" -> failwith "TODO quantified exp"
     | "iPI" -> failwith "TODO quantified exp"

@@ -53,5 +53,41 @@ let pog = !input |> file_to_tree
 
 let () =
   let choice = if !all_goal then None else Some !goal_list in
-  parse_pog choice pog;
-  printme ()
+  parse_pog choice pog
+
+open Why3
+open Format
+
+let config = Whyconf.init_config None
+let main : Whyconf.main = Whyconf.get_main config
+let provers : Whyconf.config_prover Whyconf.Mprover.t =
+  Whyconf.get_provers config
+
+let cvc4 : Whyconf.config_prover =
+  let fp = Whyconf.parse_filter_prover "Vampire" in
+  (* All provers alternative counterexamples that have the name CVC4 and version 1.8 *)
+  let provers = Whyconf.filter_provers config fp in
+  if Whyconf.Mprover.is_empty provers then begin
+    eprintf "Prover CVC4 1.8 not installed or not configured@.";
+    exit 1
+  end else
+    snd (Whyconf.Mprover.max_binding provers)
+
+(* builds the environment from the [loadpath] *)
+let env : Env.env = Env.create_env (Whyconf.loadpath main)
+
+(* loading the CVC4 driver *)
+let cvc4_driver : Driver.driver =
+  try
+    Driver.load_driver_for_prover main env cvc4
+  with e ->
+    eprintf "Failed to load driver for CVC4,1.8: %a@."
+      Exn_printer.exn_printer e;
+    exit 1
+
+let () = printme ()
+
+(* let () = print_tptp cvc4_driver *)
+
+(* let () = printf "@[On task 1, CVC4,1.8 answers %a@."
+    (Call_provers.print_prover_result ?json:None) (result cvc4 cvc4_driver) *)

@@ -4,6 +4,17 @@ open Whyutils
 type ast = Element of string * (string * string) list * ast list | Text of string
 exception Bad_Ast of ast
 
+let debug = ref false
+
+let rec print_ast =
+  function
+  | Text s -> print_endline s
+  | Element(s1,args,s2) ->
+     print_string s1;
+     List.iter (fun (x,y) -> print_string (" " ^ x ^ "=" ^ y)) args;
+     print_newline ();
+     List.iter print_ast s2
+
 (* Convert the whole XML file into an ast, kept in memory (consumes lot of memory if the XML is big) *)
 let file_to_tree s =
   let open Markup in
@@ -17,7 +28,7 @@ let file_to_tree s =
       | Some x -> x
       | None -> failwith "Not an XML file"
   in close (); output
-let parse_fail x = raise (Bad_Ast x)
+let parse_fail x = (* print_ast x; *) raise (Bad_Ast x)
 
 let counter () =
   object
@@ -63,37 +74,55 @@ let type_infos =
     (* add index ast why3term *)
     method add i x t = Hashtbl.add h i (x, t)
 
-    method get x = let _,t = Hashtbl.find h x in t
+    method get x =
+      try
+        let _,t =
+          Hashtbl.find h x in t
+      with
+        Not_found -> failwith "type_infos"
   end
 
 let env =
   object(this)
     val h = Hashtbl.create 128
+    val closure = ref []
+    val type_closure = ref []
 
     method add x t =
       let t' = type_infos#get t in
-      let v = Term.t_var @@ Term.create_vsymbol (Ident.id_fresh x) t' in
+      let var_v = Term.create_vsymbol (Ident.id_fresh x) t' in
+      let v = Term.t_var var_v  in
       begin
-        Hashtbl.add h (x,t) v;
-        v
+        Hashtbl.add h x v;
+        closure := var_v :: !closure;
+        type_closure := t' :: !type_closure;
+        var_v, x
       end
-    method remove x t = Hashtbl.remove h (x,t)
+    method remove x =
+      Hashtbl.remove h x;
+      closure := List.tl !closure; (* risky *)
+      type_closure := List.tl !type_closure (* risky *)
+
+    method get_closure = !closure
+    method get_type_closure = !type_closure
 
     method new_const x t =
-      let t' = type_infos#get t in
-      let v = Term.create_fsymbol (Ident.id_fresh x) [] t' in
-      let v' = Term.t_app_infer v [] in
-      let d = Decl.create_param_decl v in
-      begin
-        my_theory := Theory.add_decl !my_theory d;
-        Hashtbl.add h (x,t) v';
-        v'
-      end
+        let v = Term.create_fsymbol (Ident.id_fresh x) [] t in
+        let v' = Term.t_app_infer v [] in
+        let d = Decl.create_param_decl v in
+        begin
+          try
+            my_theory := Theory.add_decl_with_tuples !my_theory d;
+            Hashtbl.add h x v';
+            v'
+          with
+            _ -> failwith "argh"
+        end
 
     method get x t =
-      match Hashtbl.find_opt h (x,t) with
+      match Hashtbl.find_opt h x with
       | Some v -> v
-      | None -> this#new_const x t
+      | None -> this#new_const x (type_infos#get t)
   end
 
 let type_name x = "t_" ^ x
@@ -102,7 +131,9 @@ let var_name x s n = "v_" ^ x ^ (match s with None -> "" | Some x -> "'" ^ x) ^ 
 let anon_set_name =
   let c = counter () in
   fun n -> "anon_set_" ^ n ^ "_" ^ (string_of_int c#get)
-let anon_fun_name = "anon_fun"
+let anon_fun_name =
+  let c = counter () in
+  fun () -> "anon_fun_" ^ (string_of_int c#get)
 let anon_bool_name = "anon_bool"
 
 let parse_type_group id_set =
@@ -114,7 +145,11 @@ let parse_type_group id_set =
         my_theory := Theory.add_decl !my_theory @@ Decl.create_ty_decl new_id;
         new_id
       end
-    else Hashtbl.find id_set s
+    else
+      try
+        Hashtbl.find id_set s
+      with
+        Not_found -> failwith "id_check"
   in
   let rec foo =
     let parse_record_item =
@@ -152,23 +187,86 @@ let parse_type_infos =
        type_infos#add i x t
     | x -> parse_fail x
 
-let element_type t =
-  let Ty.{ ty_node = n; ty_tag = _ } = type_infos#get t in
+let element_type Ty.{ ty_node = n; ty_tag = _ } =
   match n with
   | Tyapp (_,t::_) -> t
   | _ -> failwith "element_type"
 
+let rec my_tuple f =
+  function
+  | [] -> failwith "should not happen"
+  | [t] -> t
+  | t1 :: t2 :: l -> my_tuple f (f [t1;t2] :: l)
+
+let close_type t =
+  match env#get_type_closure with
+  | [] -> t
+  | l -> Ty.ty_func (my_tuple Ty.ty_tuple l) t
+
+let close_term t =
+  match env#get_closure with
+  | [] -> t
+  | l -> Term.t_func_app t (my_tuple Term.t_tuple (List.map Term.t_var l))
+
 let create_set name t l =
-  let set = env#new_const name t in
+  let t = type_infos#get t in
+  let t' = close_type t in
+  let set = close_term @@ env#new_const name t' in
   let name = Term.create_psymbol (Ident.id_fresh (name ^ "_pred")) [] in
   let var_v = Term.create_vsymbol (Ident.id_fresh "x") (element_type t) in
   let v = Term.t_var var_v in
   let left_term = binary_op ":" v set in
   let right_term = nary_op "or" (List.map (fun x -> binary_op "=" v x) l) in
-  let term = Term.t_forall_close [var_v] [] (binary_op "<=>" left_term right_term) in
+  let term = Term.t_forall_close (var_v::env#get_closure) [] (binary_op "<=>" left_term right_term) in
   let decl = Decl.make_ls_defn name [] term in
   my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
   set
+
+let create_fun name t t' var_v pred body =
+  let v = List.map Term.t_var var_v in
+  let foo = my_tuple Ty.ty_tuple t in
+  let bar =
+    try
+      Ty.ty_tuple [foo; t']
+    with
+      _ -> failwith "BBBB"
+  in
+  let baz =
+    try
+      Ty.ty_app set [bar]
+    with
+      _ -> failwith "CCCC"
+  in
+    let set = close_term @@ env#new_const name (close_type baz) in
+    let name = Term.create_psymbol (Ident.id_fresh (name ^ "_pred")) [] in
+    let var_x = Term.create_vsymbol (Ident.id_fresh "x") t' in
+    let x = Term.t_var var_x in
+    let tuple1 = my_tuple Term.t_tuple v in
+    let tuple2 = Term.t_tuple [tuple1;x] in
+    let left_term = binary_op ":" tuple2 set in
+    let right_term = nary_op "&" [pred; binary_op "=" x body] in
+    let term = Term.t_forall_close (List.concat [var_v;[var_x];env#get_closure]) [] (binary_op "<=>" left_term right_term) in
+    let decl = Decl.make_ls_defn name [] term in
+    my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
+    set
+
+let parse_variables =
+  let foo =
+    function
+    | Element ("Id", args, []) ->
+       let o = List.assoc "typref" args in
+       let n = o |> int_of_string in
+       let id = List.assoc "value" args in
+       let name = var_name id (List.assoc_opt "suffix" args) o in
+       env#add name n, type_infos#get (int_of_string o);
+    | x -> parse_fail x
+  in List.map foo
+
+let get_type =
+  function
+    Element (_, args, _) ->
+    List.assoc "typref" args |> int_of_string |> type_infos#get(* TODO: it does not work if Body is a Record_Update *)
+  | x -> parse_fail x
 
 let rec parse_pred =
   function
@@ -182,7 +280,18 @@ let rec parse_pred =
      let c1 = parse_exp x in
      let c2 = parse_exp y in
      op c1 c2
-  | Element ("Quantified_Pred", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) -> failwith "TODO quantified pred"
+  | Element ("Quantified_Pred", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
+     begin
+       try
+         let op = List.assoc "type" args |> quantified_pred_op in
+         let var_v, t = List.split @@ parse_variables children in
+         let var_v, v = List.split var_v in
+         let p = parse_pred b in
+         let () = List.iter env#remove v in
+         op var_v p
+       with
+         Not_found -> failwith "quantified pred"
+     end
   | Element ("Unary_Pred", args, [x]) as err ->
      let () = if List.assoc "op" args <> "not" then parse_fail err in (* for debugging *)
      Term.t_not (parse_pred x)
@@ -209,7 +318,12 @@ and parse_exp =
      let op = List.assoc "op" args |> binary_op in
      let c1 = parse_exp x in
      let c2 = parse_exp y in
-     op c1 c2
+     begin
+       try
+         op c1 c2
+       with
+         _ -> failwith "nani"
+     end
   | Element ("Ternary_Exp", args, [x;y;z]) ->
      let op = List.assoc "op" args |> ternary_op in
      let c1 = parse_exp x in
@@ -222,7 +336,13 @@ and parse_exp =
      let nary_op =
        function
        | "[" -> fun l -> failwith "TODO sequence"
-       | "{" -> fun l -> create_set (anon_set_name o) t l
+       | "{" -> fun l ->
+                begin
+                  try
+                    create_set (anon_set_name o) t l
+                  with
+                    _ -> failwith "found it"
+                end
        | x -> failwith ("Invalid n-ary expression : " ^ x)
      in
      let op = List.assoc "op" args |> nary_op in
@@ -230,10 +350,13 @@ and parse_exp =
      op c
   | Element ("Boolean_Literal", args, _) ->
      begin
-       match List.assoc "value" args with
-       | "TRUE" -> Term.t_bool_true
-       | "FALSE" -> Term.t_bool_false
-       | _ -> failwith "wrong Boolean literal"
+       try
+         match List.assoc "value" args with
+         | "TRUE" -> Term.t_bool_true
+         | "FALSE" -> Term.t_bool_false
+         | _ -> failwith "wrong Boolean literal"
+       with
+         _ -> failwith "should not happen"
      end
   | Element ("Boolean_Exp", _, [x]) ->
      let c = parse_pred x in
@@ -248,17 +371,47 @@ and parse_exp =
      let t = type_infos#get t in
      Term.t_app empty [] (Some t)
   | Element ("Id", args, children) ->
-     let o = List.assoc "typref" args in
-     let t = o |> int_of_string in
-     let id = List.assoc "value" args in
-     let a = List.assoc_opt "suffix" args in
-     let name = var_name id a o in
-     env#get name t
+     begin
+       try
+         let o = List.assoc "typref" args in
+         let t = o |> int_of_string in
+         let id = List.assoc "value" args in
+         let a = List.assoc_opt "suffix" args in
+         let name = var_name id a o in
+         env#get name t
+       with
+         _ -> failwith "???"
+     end
   | Element ("Integer_Literal", args, children) ->
      let v = List.assoc "value" args in
      Term.t_int_const (BigInt.of_string v)
   | Element ("Quantified_Exp", args, [Element ("Variables", _, children);Element ("Pred", _, [p]);Element ("Body", _, [b])]) ->
-     failwith "TODO quantified expressions"
+     begin
+       try
+         let op = List.assoc "type" args |> quantified_exp_op in
+         let var_v, t = List.split @@ parse_variables children in
+         let var_v, v = List.split var_v in
+         let t' = get_type b in
+         let p =
+           try parse_pred p
+           with
+             _ -> failwith "pred"
+         in
+         let b =
+           try
+             debug := true;
+             let b = parse_exp b in
+             debug := false;
+             b
+           with
+             x -> raise x
+         in
+         let () = List.iter env#remove v in
+         let s = create_fun (anon_fun_name ()) t t' var_v p b in
+         op s
+       with
+         Not_found -> failwith "quantified exp"
+     end
   | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
      failwith "TODO sets by comprehension"
   | Element ("STRING_Literal", args, children) ->
@@ -292,7 +445,7 @@ let parse_id =
      let s = List.assoc_opt "suffix" args in
      let name = var_name v s o in
      begin
-       env#new_const name t
+       env#new_const name (type_infos#get t)
      end
   | x -> parse_fail x
 
@@ -301,39 +454,57 @@ let parse_set name t =
   | [Element ("Enumerated_Values", _, children)] ->
      let l = List.map parse_id children in
      create_set name t l
-  | [] -> env#new_const name t
+  | [] -> env#new_const name (type_infos#get t)
   | _ -> assert false
 
 let parse_def name x =
-  let content = ref [] in
-  let foo =
-    function
-    | Element ("Set", _, Element("Id", args,[]) :: l) ->
-       let o = List.assoc "typref" args in
-       let t = o |> int_of_string in
-       let v = List.assoc "value" args in
-       let s = List.assoc_opt "suffix" args in
-       let name = var_name v s o in
-       ignore (parse_set name t l)
-    | Element (_, args,_) as a ->
-       let term = parse_pred a in
-       content := term :: !content
-    | x -> parse_fail x
-  in List.iter foo x;
-     let name = Term.create_psymbol (Ident.id_fresh name) [] in
-     let term = nary_op "&" (List.rev !content) in
-     let decl = Decl.make_ls_defn name [] term in
-     my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
-     Term.ps_app name []
+  try
+    let content = ref [] in
+    let foo =
+      function
+      | Element ("Set", _, Element("Id", args,[]) :: l) ->
+         begin
+           try
+             let o = List.assoc "typref" args in
+             let t = o |> int_of_string in
+             let v = List.assoc "value" args in
+             let s = List.assoc_opt "suffix" args in
+             let name = var_name v s o in
+             ignore (parse_set name t l)
+           with
+             Not_found -> failwith "set"
+         end
+      | Element (_, args,_) as a ->
+         begin
+           try
+             let term = parse_pred a in
+             content := term :: !content
+           with
+             Not_found -> failwith "predicate"
+         end
+      | x -> parse_fail x
+    in List.iter foo x;
+       let name = Term.create_psymbol (Ident.id_fresh name) [] in
+       let term = nary_op "&" (List.rev !content) in
+       let decl = Decl.make_ls_defn name [] term in
+       my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
+       Term.ps_app name []
+  with
+    Not_found -> failwith "parse_def"
 
 let parse_goal def hyp loc_hyp l =
   let rec foo =
     function
     | Element ("Tag", _, _) :: l -> foo l
     | Element ("Ref_Hyp", args, _) :: l ->
-       let n = List.assoc "num" args in
-       let h = n |> Hashtbl.find loc_hyp |> Lazy.force in
-       foo l |> Term.t_implies h
+       begin
+         try
+           let n = List.assoc "num" args in
+           let h = n |> Hashtbl.find loc_hyp |> Lazy.force in
+           foo l |> Term.t_implies h
+         with
+           Not_found -> failwith "parse_goal"
+       end
     | Element ("Goal", _, [x]) :: _ ->
        parse_pred x
     | Element ("Proof_State", _, _) :: l -> foo l
@@ -343,8 +514,11 @@ let parse_goal def hyp loc_hyp l =
   let name = Decl.create_prsymbol (Ident.id_fresh "goal") in
   let term = foo l in
   let term = Queue.fold (fun x h -> Term.t_implies (Lazy.force h) x) term hyp in
-  let term = Queue.fold (fun x h -> Term.t_implies (Lazy.force (Hashtbl.find define_table h)) x) term def in
-  my_theory := Theory.add_decl !my_theory @@ Decl.create_prop_decl Decl.Pgoal name term
+  try
+    let term = Queue.fold (fun x h -> Term.t_implies (Lazy.force (Hashtbl.find define_table h)) x) term def in
+    my_theory := Theory.add_decl !my_theory @@ Decl.create_prop_decl Decl.Pgoal name term
+  with
+    Not_found -> failwith "parse_goal2"
 
 let parse_hyp name h =
   let name = Term.create_psymbol (Ident.id_fresh name) [] in
@@ -451,7 +625,19 @@ let parse_pog choice =
 
 
 let printme () = Format.printf "@[my new theory is as follows:@\n@\n%a@]@."
-           Pretty.print_theory (Theory.close_theory !my_theory)
+                   Pretty.print_theory (Theory.close_theory !my_theory)
+
+let print_tptp driver =
+  Driver.print_theory driver Format.std_formatter (Theory.close_theory !my_theory)
+
+let result prover driver : Call_provers.prover_result =
+  Call_provers.wait_on_call
+    (Driver.prove_task
+       ~limit:Call_provers.empty_limit
+       ~config:main
+       ~command:(Whyconf.get_complete_command prover ~with_steps:false)
+    driver (Task.use_export None (Theory.close_theory !my_theory)))
+
 
            (*
 pog2why
