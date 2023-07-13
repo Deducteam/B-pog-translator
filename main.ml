@@ -8,6 +8,15 @@ let version () =
   print_string text; exit 0
 let version_doc = " output version information and exit"
 
+let prover_option = "-p"
+let prover = ref ""
+let prover_doc = " select prover"
+
+let proveme_option = "-P"
+let proveme = ref false
+let proveme_fun () = proveme := true
+let proveme_doc = " prove the obligation"
+
 let input_option = "-i"
 let input = ref ""
 let input_doc = " input filename"
@@ -32,11 +41,13 @@ let options =
     version_option, Arg.Unit version, version_doc;
     goal_option, Arg.(Tuple [Set_int arg_1; Set_int arg_2; Unit goal_add]), goal_doc;
     all_goal_option, Arg.Set all_goal, all_goal_doc;
+    prover_option, Arg.Set_string prover, prover_doc;
+    proveme_option, Arg.Unit proveme_fun, proveme_doc;
     input_option, Arg.Set_string input, input_doc;
     output_option, Arg.Set_string output, output_doc
   ]
 
-let usage = "Usage: " ^ Sys.argv.(0) ^ " [-v -A] -a M1 N1 ... -a Mk Nk -i INPUT -o OUTPUT"
+let usage = "Usage: " ^ Sys.argv.(0) ^ " [-v -A] -p prover -a M1 N1 ... -a Mk Nk -i INPUT -o OUTPUT"
 
 let () =
   begin
@@ -58,36 +69,42 @@ let () =
 open Why3
 open Format
 
-let config = Whyconf.init_config None
-let main : Whyconf.main = Whyconf.get_main config
-let provers : Whyconf.config_prover Whyconf.Mprover.t =
-  Whyconf.get_provers config
+let out = Format.formatter_of_out_channel (open_out !output)
 
-let cvc4 : Whyconf.config_prover =
-  let fp = Whyconf.parse_filter_prover "Vampire" in
-  (* All provers alternative counterexamples that have the name CVC4 and version 1.8 *)
-  let provers = Whyconf.filter_provers config fp in
-  if Whyconf.Mprover.is_empty provers then begin
-    eprintf "Prover CVC4 1.8 not installed or not configured@.";
-    exit 1
-  end else
-    snd (Whyconf.Mprover.max_binding provers)
-
-(* builds the environment from the [loadpath] *)
-let env : Env.env = Env.create_env (Whyconf.loadpath main)
-
-(* loading the CVC4 driver *)
-let cvc4_driver : Driver.driver =
-  try
-    Driver.load_driver_for_prover main env cvc4
-  with e ->
-    eprintf "Failed to load driver for CVC4,1.8: %a@."
-      Exn_printer.exn_printer e;
-    exit 1
-
-let () = printme ()
-
-(* let () = print_tptp cvc4_driver *)
-
-(* let () = printf "@[On task 1, CVC4,1.8 answers %a@."
-    (Call_provers.print_prover_result ?json:None) (result cvc4 cvc4_driver) *)
+let () =
+  if !prover = "" then
+    printme out
+  else
+    let config = Whyconf.init_config None in
+    let main : Whyconf.main = Whyconf.get_main config in
+    let provers : Whyconf.config_prover Whyconf.Mprover.t =
+      Whyconf.get_provers config in
+    let prov : Whyconf.config_prover =
+      let fp = Whyconf.parse_filter_prover !prover in
+      let provers = Whyconf.filter_provers config fp in
+      if Whyconf.Mprover.is_empty provers then begin
+          eprintf "Prover %s not installed or not configured@." !prover;
+          exit 1
+        end else
+        snd (Whyconf.Mprover.max_binding provers)
+    in
+    (* builds the environment from the [loadpath] *)
+    let env : Env.env = Env.create_env (Whyconf.loadpath main) in
+    let driver : Driver.driver =
+      try
+        Driver.load_driver_for_prover main env prov
+      with e ->
+        eprintf "Failed to load driver for %s: %a@." !prover
+          Exn_printer.exn_printer e;
+        exit 1
+    in
+    if !proveme then
+      begin
+        print_endline "Calling prover";
+        result prov driver;
+        print_endline "Done";
+        printf "@[%s answers %a@." !prover
+          (Call_provers.print_prover_result ?json:None) (result prov driver)
+      end
+    else
+      print_tptp driver out

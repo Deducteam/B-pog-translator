@@ -1,3 +1,9 @@
+(*
+  On records:
+  Decl.make_record ?
+  How to declare record types???
+ *)
+
 open Why3
 open Whyutils
 
@@ -111,12 +117,9 @@ let env =
         let v' = Term.t_app_infer v [] in
         let d = Decl.create_param_decl v in
         begin
-          try
-            my_theory := Theory.add_decl_with_tuples !my_theory d;
+            my_task := Task.add_decl !my_task d;
             Hashtbl.add h x v';
             v'
-          with
-            _ -> failwith "argh"
         end
 
     method get x t =
@@ -134,7 +137,12 @@ let anon_set_name =
 let anon_fun_name =
   let c = counter () in
   fun () -> "anon_fun_" ^ (string_of_int c#get)
-let anon_bool_name = "anon_bool"
+let anon_bool_name =
+  let c = counter () in
+  fun () -> "anon_bool_" ^ (string_of_int c#get)
+let goal_name =
+  let c = counter () in
+  fun () -> "goal_" ^ (string_of_int c#get)
 
 let parse_type_group id_set =
   let id_check s =
@@ -142,7 +150,7 @@ let parse_type_group id_set =
       begin
         let new_id = Ty.create_tysymbol (Ident.id_fresh s) [] Ty.NoDef in
         Hashtbl.add id_set s new_id;
-        my_theory := Theory.add_decl !my_theory @@ Decl.create_ty_decl new_id;
+        my_task := Task.add_decl !my_task @@ Decl.create_ty_decl new_id;
         new_id
       end
     else
@@ -212,43 +220,40 @@ let create_set name t l =
   let t = type_infos#get t in
   let t' = close_type t in
   let set = close_term @@ env#new_const name t' in
-  let name = Term.create_psymbol (Ident.id_fresh (name ^ "_pred")) [] in
+  let name = Decl.create_prsymbol (Ident.id_fresh (name ^ "_pred")) in
   let var_v = Term.create_vsymbol (Ident.id_fresh "x") (element_type t) in
   let v = Term.t_var var_v in
   let left_term = binary_op ":" v set in
   let right_term = nary_op "or" (List.map (fun x -> binary_op "=" v x) l) in
   let term = Term.t_forall_close (var_v::env#get_closure) [] (binary_op "<=>" left_term right_term) in
-  let decl = Decl.make_ls_defn name [] term in
-  my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
+  my_task := Task.add_decl !my_task (Decl.create_prop_decl Paxiom name term);
   set
 
 let create_fun name t t' var_v pred body =
   let v = List.map Term.t_var var_v in
-  let foo = my_tuple Ty.ty_tuple t in
-  let bar =
-    try
-      Ty.ty_tuple [foo; t']
-    with
-      _ -> failwith "BBBB"
+  let foo =
+    Ty.ty_app set [Ty.ty_tuple [my_tuple Ty.ty_tuple t; t']]
   in
-  let baz =
-    try
-      Ty.ty_app set [bar]
-    with
-      _ -> failwith "CCCC"
-  in
-    let set = close_term @@ env#new_const name (close_type baz) in
-    let name = Term.create_psymbol (Ident.id_fresh (name ^ "_pred")) [] in
-    let var_x = Term.create_vsymbol (Ident.id_fresh "x") t' in
-    let x = Term.t_var var_x in
-    let tuple1 = my_tuple Term.t_tuple v in
-    let tuple2 = Term.t_tuple [tuple1;x] in
-    let left_term = binary_op ":" tuple2 set in
-    let right_term = nary_op "&" [pred; binary_op "=" x body] in
-    let term = Term.t_forall_close (List.concat [var_v;[var_x];env#get_closure]) [] (binary_op "<=>" left_term right_term) in
-    let decl = Decl.make_ls_defn name [] term in
-    my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
-    set
+  let set = close_term @@ env#new_const name (close_type foo) in
+  let name = Decl.create_prsymbol (Ident.id_fresh (name ^ "_pred")) in
+  let var_x = Term.create_vsymbol (Ident.id_fresh "x") t' in
+  let x = Term.t_var var_x in
+  let tuple1 = my_tuple Term.t_tuple v in
+  let tuple2 = Term.t_tuple [tuple1;x] in
+  let left_term = binary_op ":" tuple2 set in
+  let right_term = nary_op "&" [pred; binary_op "=" x body] in
+  let term = Term.t_forall_close (List.concat [var_v;[var_x];env#get_closure]) [] (binary_op "<=>" left_term right_term) in
+  my_task := Task.add_decl !my_task (Decl.create_prop_decl Paxiom name term);
+  set
+
+let create_bool b =
+  let name = anon_bool_name () in
+  let c = close_term @@ env#new_const name (close_type Ty.ty_bool) in
+  let name = Decl.create_prsymbol (Ident.id_fresh (name ^ "_pred")) in
+  let left_term = binary_op "=" c Term.t_bool_true in
+  let term = Term.t_forall_close env#get_closure [] (binary_op "<=>" left_term b) in
+  my_task := Task.add_decl !my_task (Decl.create_prop_decl Paxiom name term);
+  c
 
 let parse_variables =
   let foo =
@@ -360,7 +365,7 @@ and parse_exp =
      end
   | Element ("Boolean_Exp", _, [x]) ->
      let c = parse_pred x in
-     print_endline "TODO boolean exp"; Term.t_bool_true
+     create_bool c
   (* failwith "TODO boolean exp" *)
   | Element ("EmptySet", args, _) ->
      let t = List.assoc "typref" args |> int_of_string in
@@ -416,10 +421,7 @@ and parse_exp =
      failwith "TODO sets by comprehension"
   | Element ("STRING_Literal", args, children) ->
      let v = List.assoc "value" args in
-     begin
-       print_endline "Warning: strings are not fully supported.";
-       Term.t_string_const v
-     end
+     Term.t_string_const v
   | Element ("Struct", args, children) ->
      failwith "TODO struct"
   | Element ("Record", args, children) ->
@@ -487,7 +489,7 @@ let parse_def name x =
        let name = Term.create_psymbol (Ident.id_fresh name) [] in
        let term = nary_op "&" (List.rev !content) in
        let decl = Decl.make_ls_defn name [] term in
-       my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
+       my_task := Task.add_decl !my_task (Decl.create_logic_decl [decl]);
        Term.ps_app name []
   with
     Not_found -> failwith "parse_def"
@@ -511,12 +513,12 @@ let parse_goal def hyp loc_hyp l =
     | x :: l -> parse_fail x
     | _ -> assert false
   in
-  let name = Decl.create_prsymbol (Ident.id_fresh "goal") in
+  let name = Decl.create_prsymbol (Ident.id_fresh (goal_name ())) in
   let term = foo l in
   let term = Queue.fold (fun x h -> Term.t_implies (Lazy.force h) x) term hyp in
   try
     let term = Queue.fold (fun x h -> Term.t_implies (Lazy.force (Hashtbl.find define_table h)) x) term def in
-    my_theory := Theory.add_decl !my_theory @@ Decl.create_prop_decl Decl.Pgoal name term
+    my_task := Task.add_decl !my_task @@ Decl.create_prop_decl Decl.Pgoal name term
   with
     Not_found -> failwith "parse_goal2"
 
@@ -524,24 +526,25 @@ let parse_hyp name h =
   let name = Term.create_psymbol (Ident.id_fresh name) [] in
   let term = parse_pred h in
   let decl = Decl.make_ls_defn name [] term in
-  my_theory := Theory.add_decl !my_theory (Decl.create_logic_decl [decl]);
+  my_task := Task.add_decl !my_task (Decl.create_logic_decl [decl]);
   Term.ps_app name []
 
-let add_po_table c =
+let add_po_table c co =
   let def = Queue.create () in
   let hyp = Queue.create () in
   let loc_hyp = Hashtbl.create 128 in
   let goal = one_table "Goal" in
+  let count = counter () in
   let pass =
     function
     | Element("Tag", _, [Text(s)]) -> ()
     | Element("Definition", args, []) ->
        Queue.add (List.assoc "name" args) def
     | Element("Hypothesis", _, [x]) ->
-       Queue.add (lazy (parse_hyp "name" x)) hyp
+       Queue.add (lazy (parse_hyp ("hyp_" ^ (string_of_int count#get) ^ "_" ^ co) x)) hyp
     | Element("Local_Hyp", args, [x]) ->
        let n = List.assoc "num" args in
-       Hashtbl.add loc_hyp n (lazy (parse_hyp ("loc_hyp" ^ n) x))
+       Hashtbl.add loc_hyp n (lazy (parse_hyp ("loc_hyp_" ^ n ^ "_" ^ co) x))
     | Element("Simple_Goal", _, l) ->
        goal#add (lazy (parse_goal def hyp loc_hyp l))
     | x -> parse_fail x
@@ -596,13 +599,14 @@ Roadblocks:
 
 (* choice is None for getting all the POs, or Some([(a1,b1);...;(an,bn)]) for goals a1:b1 ... an:bn *)
 let parse_pog choice =
+  let co = counter () in
   let pass1 =
     function
     | Element("Define", args, children) ->
        let x = List.assoc "name" args in
        Hashtbl.add define_table x (lazy (parse_def (if x = "B definitions" then "b_def" else x) children))
     | Element ("Proof_Obligation", args, children) ->
-       add_po_table children
+       add_po_table children (string_of_int co#get)
     | Element ("TypeInfos", args, children) -> parse_type_infos children
     | _ -> ()
   in
@@ -624,11 +628,10 @@ let parse_pog choice =
   | x -> parse_fail x
 
 
-let printme () = Format.printf "@[my new theory is as follows:@\n@\n%a@]@."
-                   Pretty.print_theory (Theory.close_theory !my_theory)
+let printme out = Format.fprintf out "%a" Pretty.print_task !my_task
 
-let print_tptp driver =
-  Driver.print_theory driver Format.std_formatter (Theory.close_theory !my_theory)
+let print_tptp driver out =
+  Driver.print_task driver out !my_task
 
 let result prover driver : Call_provers.prover_result =
   Call_provers.wait_on_call
@@ -636,7 +639,7 @@ let result prover driver : Call_provers.prover_result =
        ~limit:Call_provers.empty_limit
        ~config:main
        ~command:(Whyconf.get_complete_command prover ~with_steps:false)
-    driver (Task.use_export None (Theory.close_theory !my_theory)))
+    driver !my_task)
 
 
            (*

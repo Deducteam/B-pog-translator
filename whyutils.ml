@@ -227,15 +227,9 @@ let sigma = Theory.ns_find_ls sumsigma_theory.Theory.th_export ["sigma"]
 
 let theories = [bool_theory; int_theory; power_theory; computerdivision_theory; bbool_theory; interval_theory; powerset_theory; relation_theory; image_theory; identity_theory; inversedomran_theory; function_theory; sequence_theory; isfinite_theory; powerrelation_theory; restriction_theory; overriding_theory; composition_theory; blist_theory; minmax_theory; projection_theory; iteration_theory; generalized_theory; sumsigma_theory]
 
-let use th1 th2 =
-  let name = th2.Theory.th_name in
-  Theory.close_scope
-    (Theory.use_export (Theory.open_scope th1 name.Ident.id_string) th2)
-    ~import:true
-
-let my_theory =
-  let my_theory = Theory.create_theory (Ident.id_fresh "B_translation") in
-  List.fold_left (fun t1 t2 -> use t1 t2) my_theory theories |> ref
+let my_task =
+  let my_task = None in
+  List.fold_left (fun t1 t2 -> Task.use_export t1 t2) my_task theories |> ref
 
 let unary_op =
   let f t x = Term.t_app_infer t [x] in

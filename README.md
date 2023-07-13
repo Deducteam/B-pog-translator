@@ -3,17 +3,21 @@ Translate a POG file into a lambdapi file
 
 # How to compile
 ```
-$ ocamlbuild -pkg markup main.native
-```
-
-And in the `b` directory, do
-```
-lambdapi install syntax.lp
+$ ocamlbuild -pkg why3 -pkg markup main.native
 ```
 
 # How to use
 ```
-$ ./main.native -i input.pog -o output
+$ ./main.native [[-P] [-p prover]] -a M N -i input.pog -o output
 ```
 
-This will create a directory `output` in which there will be some lambdapi files corresponding to the translation of `input.pog`. These files depends on the B.syntax module (the `syntax.lp` file in the `b` directory).
+It considers the goal N in the proof obligation M in input.pog. If prover is not set, it outputs a .mlw file (which is not intended to typecheck).
+If prover is set, it outputs a TPTP/SMT-LIB/... file appropriate for that prover.
+Moreover, if -P is set, it outputs an empty file (TOFIX) and the prover is called on the goal.
+
+# Not implemented yet
+- dealing with multiple goals
+- structures
+- Zenon Modulo
+- cleaning the code
+- ...
