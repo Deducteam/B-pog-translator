@@ -92,7 +92,8 @@ let () =
     let env : Env.env = Env.create_env (Whyconf.loadpath main) in
     let driver : Driver.driver =
       try
-        Driver.load_driver_for_prover main env prov
+        Driver.load_driver_file_and_extras main env "vampire.drv" []
+        (* Driver.load_driver_for_prover main env prov *)
       with e ->
         eprintf "Failed to load driver for %s: %a@." !prover
           Exn_printer.exn_printer e;
