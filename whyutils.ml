@@ -1,6 +1,7 @@
 open Why3
 
 let config = Whyconf.init_config None
+let (config, env) = Whyconf.Args.complete_initialization ()
 let main = Whyconf.get_main config
 let main = Whyconf.set_loadpath main ["."]
 let env = Env.create_env (Whyconf.loadpath main)

@@ -69,7 +69,7 @@ let () =
 open Why3
 open Format
 
-let out = Format.formatter_of_out_channel (open_out !output)
+let out = formatter_of_out_channel (open_out !output)
 
 let () =
   if !prover = "" then
@@ -77,8 +77,8 @@ let () =
   else
     let config = Whyconf.init_config None in
     let main : Whyconf.main = Whyconf.get_main config in
-    let provers : Whyconf.config_prover Whyconf.Mprover.t =
-      Whyconf.get_provers config in
+    (* let provers : Whyconf.config_prover Whyconf.Mprover.t =
+      Whyconf.get_provers config in *)
     let prov : Whyconf.config_prover =
       let fp = Whyconf.parse_filter_prover !prover in
       let provers = Whyconf.filter_provers config fp in
@@ -92,8 +92,9 @@ let () =
     let env : Env.env = Env.create_env (Whyconf.loadpath main) in
     let driver : Driver.driver =
       try
-        Driver.load_driver_file_and_extras main env "vampire.drv" []
-        (* Driver.load_driver_for_prover main env prov *)
+        (* Driver.load_driver_file_and_extras main env "vampire.drv" [] *)
+        Driver.load_driver_for_prover main env prov
+        (* Driver.load_driver_file_and_extras main env "tptp-tff1.drv" [] *)
       with e ->
         eprintf "Failed to load driver for %s: %a@." !prover
           Exn_printer.exn_printer e;
@@ -102,7 +103,7 @@ let () =
     if !proveme then
       begin
         print_endline "Calling prover";
-        result prov driver;
+        ignore @@ result prov driver;
         print_endline "Done";
         printf "@[%s answers %a@." !prover
           (Call_provers.print_prover_result ?json:None) (result prov driver)
