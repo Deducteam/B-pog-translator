@@ -1,0 +1,212 @@
+ID : Type.
+U : Type.
+Thm : (U -> Type).
+T : Type.
+{|τ|} : (T -> Type).
+Set : (T -> T).
+{|*|} : (T -> (T -> T)).
+Z_T : T.
+INTEGER : ({|τ|} (Set Z_T)).
+R_T : T.
+REAL : ({|τ|} (Set R_T)).
+FLOAT_T : T.
+FLOAT : ({|τ|} (Set FLOAT_T)).
+BOOL_T : T.
+BOOL : ({|τ|} (Set BOOL_T)).
+STRING_T : T.
+STRING : ({|τ|} (Set STRING_T)).
+type_T : (ID -> T).
+list : (T -> Type).
+nil : (t : T -> (list t)).
+cons : (t : T -> (({|τ|} t) -> ((list t) -> (list t)))).
+typlist : Type.
+typnil : (T -> typlist).
+typcons : (T -> (typlist -> typlist)).
+def curryT : (typlist -> (T -> Type)).
+[_0, _1] curryT (typnil _0) _1 --> (({|τ|} _0) -> ({|τ|} _1)).
+[_0, _1, _2] curryT (typcons _0 _1) _2 --> (({|τ|} _0) -> (curryT _1 _2)).
+def curryU : (typlist -> Type).
+[_0] curryU (typnil _0) --> (({|τ|} _0) -> U).
+[_0, _1] curryU (typcons _0 _1) --> (({|τ|} _0) -> (curryU _1)).
+def to_T : (typlist -> T).
+[_0] to_T (typnil _0) --> _0.
+[_0, _1] to_T (typcons _0 (typnil _1)) --> ({|*|} _0 _1).
+[_0, _1, _2] to_T (typcons _0 (typcons _1 _2)) --> (to_T (typcons ({|*|} _0 _1) _2)).
+struct_sig : Type.
+struct_nil : (ID -> (T -> struct_sig)).
+struct_cons : (ID -> (T -> (struct_sig -> struct_sig))).
+struct_T : (struct_sig -> T).
+record_sig : Type.
+record_nil : (t : T -> (ID -> (({|τ|} t) -> record_sig))).
+record_cons : (t : T -> (ID -> (({|τ|} t) -> (record_sig -> record_sig)))).
+def struct_type : (record_sig -> struct_sig).
+[_0, _1, _2] struct_type (record_nil (Set _0) _1 _2) --> (struct_nil _1 _0).
+[_0, _1, _2, _3] struct_type (record_cons (Set _0) _1 _2 _3) --> (struct_cons _1 _0 (struct_type _3)).
+def record_type : (record_sig -> struct_sig).
+[_0, _1, _2] record_type (record_nil _0 _1 _2) --> (struct_nil _1 _0).
+[_0, _1, _2, _3] record_type (record_cons _0 _1 _2 _3) --> (struct_cons _1 _0 (record_type _3)).
+accessible : (ID -> (T -> (struct_sig -> Type))).
+accessible_nil : (id : ID -> (t : T -> (accessible id t (struct_nil id t)))).
+accessible_cons : (id : ID -> (t : T -> (s : struct_sig -> (accessible id t (struct_cons id t s))))).
+skip : (id1 : ID -> (t1 : T -> (id2 : ID -> (t2 : T -> (s : struct_sig -> ((accessible id1 t1 s) -> (accessible id1 t1 (struct_cons id2 t2 s)))))))).
+TRUE : U.
+FALSE : U.
+{|⇒|} : (U -> (U -> U)).
+{|⇔|} : (U -> (U -> U)).
+{|∨|} : (U -> (U -> U)).
+{|∧|} : (U -> (U -> U)).
+{|¬|} : (U -> U).
+{|∀|} : (t : T -> ((({|τ|} t) -> U) -> U)).
+{|∃|} : (t : T -> ((({|τ|} t) -> U) -> U)).
+{|∈|} : (t : T -> (({|τ|} t) -> (({|τ|} (Set t)) -> U))).
+notin : (t : T -> (({|τ|} t) -> (({|τ|} (Set t)) -> U))).
+{|⊆|} : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> U))).
+notincluded : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> U))).
+{|⊂|} : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> U))).
+notstrictincluded : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> U))).
+{|=|} : (t : T -> (({|τ|} t) -> (({|τ|} t) -> U))).
+{|≠|} : (t : T -> (({|τ|} t) -> (({|τ|} t) -> U))).
+{|≥i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> U)).
+{|>i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> U)).
+{|<i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> U)).
+{|≤i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> U)).
+{|≥r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> U)).
+{|>r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> U)).
+{|<r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> U)).
+{|≤r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> U)).
+{|≥f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> U)).
+{|>f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> U)).
+{|<f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> U)).
+{|≤f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> U)).
+imax : (({|τ|} (Set Z_T)) -> ({|τ|} Z_T)).
+rmax : (({|τ|} (Set R_T)) -> ({|τ|} R_T)).
+imin : (({|τ|} (Set Z_T)) -> ({|τ|} Z_T)).
+rmin : (({|τ|} (Set R_T)) -> ({|τ|} R_T)).
+card : (t : T -> (({|τ|} (Set t)) -> ({|τ|} Z_T))).
+dom : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set t))))).
+ran : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set u))))).
+pow : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set t))))).
+pow1 : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set t))))).
+fin : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set t))))).
+fin1 : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set t))))).
+union_gen : (t : T -> (({|τ|} (Set (Set t))) -> ({|τ|} (Set t)))).
+inter_gen : (t : T -> (({|τ|} (Set (Set t))) -> ({|τ|} (Set t)))).
+seq : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} Z_T t)))))).
+seq1 : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} Z_T t)))))).
+iseq : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} Z_T t)))))).
+iseq1 : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} Z_T t)))))).
+minusi : (({|τ|} Z_T) -> ({|τ|} Z_T)).
+minusr : (({|τ|} R_T) -> ({|τ|} R_T)).
+{|~|} : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set ({|*|} u t)))))).
+size : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} Z_T))).
+perm : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} Z_T t)))))).
+first : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} t))).
+last : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} t))).
+id : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set ({|*|} t t))))).
+closure : (t : T -> (({|τ|} (Set ({|*|} t t))) -> ({|τ|} (Set ({|*|} t t))))).
+closure1 : (t : T -> (({|τ|} (Set ({|*|} t t))) -> ({|τ|} (Set ({|*|} t t))))).
+tail : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} (Set ({|*|} Z_T t))))).
+front : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} (Set ({|*|} Z_T t))))).
+rev : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} (Set ({|*|} Z_T t))))).
+conc : (t : T -> (({|τ|} (Set ({|*|} Z_T (Set ({|*|} Z_T t))))) -> ({|τ|} (Set ({|*|} Z_T t))))).
+succ : (({|τ|} Z_T) -> ({|τ|} Z_T)).
+pred : (({|τ|} Z_T) -> ({|τ|} Z_T)).
+rel : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t (Set u)))) -> ({|τ|} (Set ({|*|} t u)))))).
+fnc : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set ({|*|} t (Set u))))))).
+real : (({|τ|} Z_T) -> ({|τ|} R_T)).
+floor : (({|τ|} R_T) -> ({|τ|} Z_T)).
+ceiling : (({|τ|} R_T) -> ({|τ|} Z_T)).
+tree : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} (Set ({|*|} Z_T Z_T)) t)))))).
+btree : (t : T -> (({|τ|} (Set t)) -> ({|τ|} (Set (Set ({|*|} (Set ({|*|} Z_T Z_T)) t)))))).
+top : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} t))).
+sons : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} Z_T (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))))).
+pref : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} ({|*|} Z_T t)))).
+post : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} ({|*|} Z_T t)))).
+sizet : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} Z_T))).
+mirror : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))).
+left_tree : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))).
+right_tree : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))).
+infix_tree : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} Z_T t))))).
+bin_unary : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))).
+pair : (t : T -> (u : T -> (({|τ|} t) -> (({|τ|} u) -> ({|τ|} ({|*|} t u)))))).
+{|*_i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+{|*_r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> ({|τ|} R_T))).
+{|*_f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> ({|τ|} FLOAT_T))).
+{|*_s|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set ({|*|} t u))))))).
+{|**i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+{|**r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> ({|τ|} R_T))).
+{|+_i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+{|+_r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> ({|τ|} R_T))).
+{|+_f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> ({|τ|} FLOAT_T))).
+{|+->|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|+->>|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|-_i|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+{|-_r|} : (({|τ|} R_T) -> (({|τ|} R_T) -> ({|τ|} R_T))).
+{|-_f|} : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> ({|τ|} FLOAT_T))).
+{|-_s|} : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> ({|τ|} (Set t))))).
+{|-->|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|-->>|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|->|} : (t : T -> (({|τ|} t) -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} (Set ({|*|} Z_T t)))))).
+{|--|} : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} (Set Z_T)))).
+div_i : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+div_r : (({|τ|} R_T) -> (({|τ|} R_T) -> ({|τ|} R_T))).
+div_f : (({|τ|} FLOAT_T) -> (({|τ|} FLOAT_T) -> ({|τ|} FLOAT_T))).
+{|∩|} : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> ({|τ|} (Set t))))).
+headrestrict : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> (({|τ|} Z_T) -> ({|τ|} (Set ({|*|} Z_T t)))))).
+comp : (t : T -> (u : T -> (v : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set ({|*|} u v))) -> ({|τ|} (Set ({|*|} t v)))))))).
+{|<+|} : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set ({|*|} t u))))))).
+{|<->|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|<-|} : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> (({|τ|} t) -> ({|τ|} (Set ({|*|} Z_T t)))))).
+{|dom-|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set ({|*|} t u))))))).
+domrestrict : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set ({|*|} t u))) -> ({|τ|} (Set ({|*|} t u))))))).
+{|>+>|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|>->|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|>->>|} : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set (Set ({|*|} t u)))))))).
+{|><|} : (t : T -> (u : T -> (v : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set ({|*|} t v))) -> ({|τ|} (Set ({|*|} t ({|*|} u v))))))))).
+par : (t : T -> (u : T -> (v : T -> (w : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set ({|*|} v w))) -> ({|τ|} (Set ({|*|} ({|*|} t v) ({|*|} u w)))))))))).
+{|∪|} : (t : T -> (({|τ|} (Set t)) -> (({|τ|} (Set t)) -> ({|τ|} (Set t))))).
+tailrestrict : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> (({|τ|} Z_T) -> ({|τ|} (Set ({|*|} Z_T t)))))).
+{|^|} : (t : T -> (({|τ|} (Set ({|*|} Z_T t))) -> (({|τ|} (Set ({|*|} Z_T t))) -> ({|τ|} (Set ({|*|} Z_T t)))))).
+mod : (({|τ|} Z_T) -> (({|τ|} Z_T) -> ({|τ|} Z_T))).
+map : (t : T -> (u : T -> (({|τ|} t) -> (({|τ|} u) -> ({|τ|} ({|*|} t u)))))).
+imagerestrict : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set u)) -> ({|τ|} (Set ({|*|} t u))))))).
+{|image-|} : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set u)) -> ({|τ|} (Set ({|*|} t u))))))).
+image : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} (Set t)) -> ({|τ|} (Set u)))))).
+eval : (t : T -> (u : T -> (({|τ|} (Set ({|*|} t u))) -> (({|τ|} t) -> ({|τ|} u))))).
+prj1 : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set ({|*|} ({|*|} t u) t))))))).
+prj2 : (t : T -> (u : T -> (({|τ|} (Set t)) -> (({|τ|} (Set u)) -> ({|τ|} (Set ({|*|} ({|*|} t u) u))))))).
+iterate : (t : T -> (({|τ|} (Set ({|*|} t t))) -> (({|τ|} Z_T) -> ({|τ|} (Set ({|*|} t t)))))).
+const : (t : T -> (({|τ|} t) -> (({|τ|} (Set ({|*|} Z_T (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t)))))).
+rank : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} (Set ({|*|} Z_T Z_T))) -> ({|τ|} Z_T)))).
+father : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} (Set ({|*|} Z_T Z_T))) -> ({|τ|} (Set ({|*|} Z_T Z_T)))))).
+subtree : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} (Set ({|*|} Z_T Z_T))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t)))))).
+arity : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} (Set ({|*|} Z_T Z_T))) -> ({|τ|} Z_T)))).
+son : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} (Set ({|*|} Z_T Z_T))) -> (({|τ|} Z_T) -> ({|τ|} (Set ({|*|} Z_T Z_T))))))).
+bin_ternary : (t : T -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> (({|τ|} t) -> (({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))) -> ({|τ|} (Set ({|*|} (Set ({|*|} Z_T Z_T)) t))))))).
+sequence : (t : T -> ((list t) -> ({|τ|} (Set ({|*|} Z_T t))))).
+extension : (t : T -> ((list t) -> ({|τ|} (Set t)))).
+{|%|} : (t : typlist -> (u : T -> ((curryU t) -> ((curryT t u) -> ({|τ|} (Set ({|*|} (to_T t) u))))))).
+iSIGMA : (t : typlist -> ((curryU t) -> ((curryT t Z_T) -> ({|τ|} Z_T)))).
+rSIGMA : (t : typlist -> ((curryU t) -> ((curryT t R_T) -> ({|τ|} R_T)))).
+iPI : (t : typlist -> ((curryU t) -> ((curryT t Z_T) -> ({|τ|} Z_T)))).
+rPI : (t : typlist -> ((curryU t) -> ((curryT t R_T) -> ({|τ|} R_T)))).
+INTER : (t : typlist -> (u : T -> ((curryU t) -> ((curryT t (Set u)) -> ({|τ|} (Set u)))))).
+UNION : (t : typlist -> (u : T -> ((curryU t) -> ((curryT t (Set u)) -> ({|τ|} (Set u)))))).
+comprehension : (t : typlist -> ((curryU t) -> ({|τ|} (Set (to_T t))))).
+true : ({|τ|} BOOL_T).
+false : ({|τ|} BOOL_T).
+Boolean_Exp : (U -> ({|τ|} BOOL_T)).
+emptyset : (t : T -> ({|τ|} (Set t))).
+emptyseq : (t : T -> ({|τ|} (Set ({|*|} Z_T t)))).
+cst : (t : T -> (ID -> ({|τ|} (Set t)))).
+pos_int : Type.
+xH : pos_int.
+x0 : (pos_int -> pos_int).
+x1 : (pos_int -> pos_int).
+0' : ({|τ|} Z_T).
+Zpos : (pos_int -> ({|τ|} Z_T)).
+Zneg : (pos_int -> ({|τ|} Z_T)).
+struct : (r : record_sig -> ({|τ|} (Set (struct_T (struct_type r))))).
+record : (r : record_sig -> ({|τ|} (struct_T (record_type r)))).
+record_update : (t : struct_sig -> (u : T -> (({|τ|} (struct_T t)) -> (i : ID -> (({|τ|} u) -> ((accessible i u t) -> ({|τ|} (struct_T t)))))))).
+record_field_access : (t : struct_sig -> (u : T -> (({|τ|} (struct_T t)) -> (i : ID -> ((accessible i u t) -> ({|τ|} u)))))).
