@@ -1,7 +1,7 @@
 (*
   On records:
   Decl.make_record ?
-  How to declare record types???
+  How to declare record types??
  *)
 
 open Why3
@@ -58,8 +58,10 @@ let one_table id =
     val c = counter ()
     val h = Hashtbl.create 128
 
+    method clear = c#init; Hashtbl.clear h
+
     method add x = Hashtbl.add h c#get x
-    method iter f = Hashtbl.iter (fun _ x -> f x) h
+    method iter f = Some (Hashtbl.iter (fun _ x -> f x) h)
     method get n =
       try
         Some (Hashtbl.find h n)
@@ -77,6 +79,8 @@ let type_infos =
   object
     val h = Hashtbl.create 128
 
+    method clear = Hashtbl.clear h
+
     (* add index ast why3term *)
     method add i x t = Hashtbl.add h i (x, t)
 
@@ -93,6 +97,10 @@ let env =
     val h = Hashtbl.create 128
     val closure = ref []
     val type_closure = ref []
+
+    method clear = Hashtbl.clear h;
+                   closure := [];
+                   type_closure := []
 
     method add x t =
       let t' = type_infos#get t in
@@ -185,8 +193,9 @@ let parse_type_group id_set =
     | x -> parse_fail x
   in foo
 
+let id_set = Hashtbl.create 128
+
 let parse_type_infos =
-  let id_set = Hashtbl.create 128 in
   List.iter @@
     function
     | Element ("Type", args, [x]) ->
@@ -226,6 +235,18 @@ let create_set name t l =
   let left_term = binary_op ":" v set in
   let right_term = nary_op "or" (List.map (fun x -> binary_op "=" v x) l) in
   let term = Term.t_forall_close (var_v::env#get_closure) [] (binary_op "<=>" left_term right_term) in
+  my_task := Task.add_decl !my_task (Decl.create_prop_decl Paxiom name term);
+  set
+
+let create_comprehension name t var_v pred =
+  let v = List.map Term.t_var var_v in
+  let foo = Ty.ty_app set [my_tuple Ty.ty_tuple t] in
+  let set = close_term @@ env#new_const name (close_type foo) in
+  let name = Decl.create_prsymbol (Ident.id_fresh (name ^ "_pred")) in
+  let tuple = my_tuple Term.t_tuple v in
+  let left_term = binary_op ":" tuple set in
+  let right_term = pred in
+  let term = Term.t_forall_close (List.concat [var_v;env#get_closure]) [] (binary_op "<=>" left_term right_term) in
   my_task := Task.add_decl !my_task (Decl.create_prop_decl Paxiom name term);
   set
 
@@ -377,15 +398,15 @@ and parse_exp =
      Term.t_app empty [] (Some t)
   | Element ("Id", args, children) ->
      begin
-       try
-         let o = List.assoc "typref" args in
-         let t = o |> int_of_string in
-         let id = List.assoc "value" args in
-         let a = List.assoc_opt "suffix" args in
-         let name = var_name id a o in
+       let o = List.assoc "typref" args in
+       let t = o |> int_of_string in
+       let id = List.assoc "value" args in
+       let a = List.assoc_opt "suffix" args in
+       let name = var_name id a o in
+       (* try *)
          env#get name t
-       with
-         _ -> failwith "???"
+       (* with
+         _ -> failwith (name ^ "???") *)
      end
   | Element ("Integer_Literal", args, children) ->
      let v = List.assoc "value" args in
@@ -417,8 +438,22 @@ and parse_exp =
        with
          Not_found -> failwith "quantified exp"
      end
-  | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [b])]) ->
-     failwith "TODO sets by comprehension"
+  | Element ("Quantified_Set", args, [Element ("Variables", _, children);Element ("Body", _, [p])]) ->
+     begin
+       try
+         let o = List.assoc "typref" args in
+         let var_v, t = List.split @@ parse_variables children in
+         let var_v, v = List.split var_v in
+         let p =
+           try parse_pred p
+           with
+             _ -> failwith "pred"
+         in
+         let () = List.iter env#remove v in
+         create_comprehension (anon_set_name o) t var_v p
+       with
+         _ -> failwith "quantified set"
+     end
   | Element ("STRING_Literal", args, children) ->
      let v = List.assoc "value" args in
      Term.t_string_const v
@@ -559,9 +594,8 @@ let parse_po choice goal =
   match choice with
   | None -> goal#iter Lazy.force
   | Some x -> match goal#get x with
-              | Some g -> Lazy.force g
-              | None -> print_endline "goal not found"
-
+              | Some g -> Some (Lazy.force g)
+              | None -> None
 
 (*
   TODO:
@@ -597,8 +631,22 @@ Roadblocks:
   - TODO
  *)
 
+let get_all_goals x =
+  let c = ref (-1) in
+  let d = ref (-1) in
+  let foo =
+    function
+    | Element("Simple_Goal", _, l) -> d := !d + 1; [(!c,!d)]
+    | _ -> []
+    in
+  let bar =
+    function
+    | Element ("Proof_Obligation", args, children) -> c := !c+1; d := -1; List.concat @@ List.map foo children
+    | _ -> []
+  in List.concat @@ List.map bar x
+
 (* choice is None for getting all the POs, or Some([(a1,b1);...;(an,bn)]) for goals a1:b1 ... an:bn *)
-let parse_pog choice =
+let rec parse_pog choice =
   let co = counter () in
   let pass1 =
     function
@@ -610,23 +658,34 @@ let parse_pog choice =
     | Element ("TypeInfos", args, children) -> parse_type_infos children
     | _ -> ()
   in
+  let pass2 l children =
+    begin
+      let error a b = prerr_endline ("Goal " ^ string_of_int a ^ ":" ^ string_of_int b ^" does not exist."); exit 1 in
+      let parse (a,b) =
+        print_endline (string_of_int a ^ " " ^ string_of_int b);
+        my_task := new_task;
+        type_infos#clear;
+        Hashtbl.clear define_table;
+        Hashtbl.clear id_set;
+        po_table#clear;
+        env#clear;
+        List.iter pass1 children;
+        match Option.bind (po_table#get a) (parse_po (Some b)) with
+        | None -> error a b
+        | Some () -> !my_task
+      in
+      Seq.map parse (List.to_seq l)
+    end
+  in
   function
-  | Element ("Proof_Obligations", args, children) ->
-     begin
-       List.iter pass1 children;
+  | Element ("Proof_Obligations", _, children) ->
+     let l =
        match choice with
-       | None -> po_table#iter (parse_po None)
-       | Some l ->
-          let error a b = prerr_endline ("Goal " ^ string_of_int a ^ ":" ^ string_of_int b ^" does not exist.") in
-          let parse (a,b) =
-            match Option.bind (po_table#get a) (fun x -> parse_po (Some b) x |> Option.some) with
-            | None -> error a b
-            | Some () -> ()
-          in
-          List.iter parse l
-     end
+       | None ->
+          get_all_goals children
+       | Some l -> l
+     in pass2 l children
   | x -> parse_fail x
-
 
 let printme out = Format.fprintf out "%a" Pretty.print_task !my_task
 
@@ -636,7 +695,7 @@ let print_tptp driver out =
 let result prover driver : Call_provers.prover_result =
   Call_provers.wait_on_call
     (Driver.prove_task
-       ~limit:Call_provers.empty_limit
+       ~limit:Call_provers.{limit_time = 3.; limit_mem = 0; limit_steps = 0}
        ~config:main
        ~command:(Whyconf.get_complete_command prover ~with_steps:false)
     driver !my_task)

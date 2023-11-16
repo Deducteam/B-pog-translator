@@ -62,7 +62,7 @@ let () =
 
 let pog = !input |> file_to_tree
 
-let () =
+let s =
   let choice = if !all_goal then None else Some !goal_list in
   parse_pog choice pog
 
@@ -70,6 +70,8 @@ open Why3
 open Format
 
 let out = formatter_of_out_channel (open_out !output)
+
+(* let () = Why3.Debug.set_flag (Why3.Debug.lookup_flag "interm_task") *)
 
 let () =
   if !prover = "" then
@@ -93,8 +95,8 @@ let () =
     let driver : Driver.driver =
       try
         (* Driver.load_driver_file_and_extras main env "vampire.drv" [] *)
-        (* Driver.load_driver_for_prover main env prov *)
         Driver.load_driver_file_and_extras main env "tptp-tff0.drv" []
+        (* Driver.load_driver_for_prover main env prov *)
       with e ->
         eprintf "Failed to load driver for %s: %a@." !prover
           Exn_printer.exn_printer e;
@@ -102,11 +104,17 @@ let () =
     in
     if !proveme then
       begin
-        print_endline "Calling prover";
-        ignore @@ result prov driver;
-        print_endline "Done";
-        printf "@[%s answers %a@." !prover
-          (Call_provers.print_prover_result ?json:None) (result prov driver)
+        Seq.iter (fun t ->
+            Whyutils.my_task := t;
+            (* print_endline "Calling prover"; *)
+            ignore @@ result prov driver;
+            (* print_endline "Done"; *)
+            printf "@[%s answers %a@." !prover
+              (Call_provers.print_prover_result ?json:None) (result prov driver)) s
       end
     else
-      print_tptp driver out
+      begin
+        let Some (t, _) = Seq.uncons s in
+        Whyutils.my_task := t;
+        print_tptp driver out
+      end

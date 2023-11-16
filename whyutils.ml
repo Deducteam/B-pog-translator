@@ -228,9 +228,11 @@ let sigma = Theory.ns_find_ls sumsigma_theory.Theory.th_export ["sigma"]
 
 let theories = [bool_theory; int_theory; power_theory; computerdivision_theory; bbool_theory; interval_theory; powerset_theory; relation_theory; image_theory; identity_theory; inversedomran_theory; function_theory; sequence_theory; isfinite_theory; powerrelation_theory; restriction_theory; overriding_theory; composition_theory; blist_theory; minmax_theory; projection_theory; iteration_theory; generalized_theory; sumsigma_theory]
 
-let my_task =
+let new_task =
   let my_task = None in
-  List.fold_left (fun t1 t2 -> Task.use_export t1 t2) my_task theories |> ref
+  List.fold_left (fun t1 t2 -> Task.use_export t1 t2) my_task theories
+
+let my_task = ref new_task
 
 let unary_op =
   let f t x = Term.t_app_infer t [x] in
@@ -289,13 +291,14 @@ let unary_op =
 
 let binary_op =
   let f t x y = Term.t_app_infer t [x;y] in
+  let notf t x y = Term.t_not (Term.t_app_infer t [x;y]) in
   function
   | "=>" -> Term.t_implies
   | "<=>" -> Term.t_iff
   | ":" -> f mem
-  | "/:" -> failwith "TODO not mem"
+  | "/:" -> notf mem
   | "<:" -> f subset
-  | "/<:" -> failwith "TODO not included"
+  | "/<:" -> notf subset
   | "<<:" -> failwith "TODO strict included"
   | "/<<:" -> failwith "TODO not strict included"
   | "=" -> Term.t_equ
