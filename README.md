@@ -1,6 +1,11 @@
 # B-pog-translator
 Translate a POG file into a lambdapi file
 
+# Requirements
+- ocaml version>4.14
+- Why3 library
+- Markup library
+
 # How to compile
 ```
 $ ocamlbuild -pkg why3 -pkg markup main.native
