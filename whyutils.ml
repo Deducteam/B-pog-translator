@@ -234,6 +234,12 @@ let new_task =
 
 let my_task = ref new_task
 
+let succ =
+  let var_x = Term.create_vsymbol (Ident.id_fresh "x") Ty.ty_int in
+  let x = Term.t_var var_x in
+  let term = Term.t_app_infer plusi [x; Term.t_int_const (BigInt.of_int 1)] in
+  Term.t_lambda [var_x] [] term
+
 let unary_op =
   let f t x = Term.t_app_infer t [x] in
   function
@@ -268,7 +274,7 @@ let unary_op =
   | "front" -> f front
   | "rev" -> f rev
   | "conc" -> f conc
-  | "succ" -> failwith "TODO function succ (fun x -> x + 1)"
+  | "succ" -> Term.t_func_app_beta succ (* TODO test *)
   | "pred" -> failwith "TODO funciton pred (fun x -> x - 1)" (* STOP *)
   | "rel" -> f to_relation
   | "fnc" -> f to_function
