@@ -114,7 +114,11 @@ let () =
       end
     else
       begin
-        let Some (t, _) = Seq.uncons s in
+        let t =
+          match Seq.uncons s with
+          | Some (t, _) -> t
+          | _ -> assert false
+        in
         Whyutils.my_task := t;
         print_tptp driver out
       end

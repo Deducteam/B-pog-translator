@@ -1,0 +1,6 @@
+(executable
+ (name main)
+ (public_name pogtranslator)
+ (modes byte native)
+ (modules :standard)
+ (libraries why3 markup))

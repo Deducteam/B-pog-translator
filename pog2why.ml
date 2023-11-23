@@ -168,17 +168,17 @@ let parse_type_group id_set =
         Not_found -> failwith "id_check"
   in
   let rec foo =
-    let parse_record_item =
+    (* let parse_record_item =
       function
       | Element ("Record_Item", args, [x]) ->
          let label = List.assoc "label" args |> label_name in
          failwith "TODO struct items (how?)"
       | x -> parse_fail x
-    in
+    in *)
     function
-    | Element ("Binary_Exp", args, [x;y]) ->
+    | Element ("Binary_Exp", _, [x;y]) ->
        Ty.ty_tuple [foo x; foo y]
-    | Element ("Id", args, children) ->
+    | Element ("Id", args, _) ->
        begin
          match List.assoc "value" args with
          | "INTEGER" -> Ty.ty_int
@@ -188,8 +188,8 @@ let parse_type_group id_set =
          | "STRING" -> Ty.ty_str
          | s -> let s = (type_name s) in Ty.ty_app (id_check s) []
        end
-    | Element ("Unary_Exp", args, [x]) -> Ty.ty_app set [foo x]
-    | Element ("Struct", args, children) -> failwith "TODO struct (how?)"
+    | Element ("Unary_Exp", _, [x]) -> Ty.ty_app set [foo x]
+    | Element ("Struct", _, _) -> failwith "TODO struct (how?)"
     | x -> parse_fail x
   in foo
 
@@ -310,7 +310,7 @@ let rec parse_pred =
      begin
        try
          let op = List.assoc "type" args |> quantified_pred_op in
-         let var_v, t = List.split @@ parse_variables children in
+         let var_v, _ = List.split @@ parse_variables children in
          let var_v, v = List.split var_v in
          let p = parse_pred b in
          let () = List.iter env#remove v in
@@ -327,14 +327,14 @@ let rec parse_pred =
      op l
   | x -> parse_fail x
 and parse_exp =
-  let parse_record_item =
+  (* let parse_record_item =
     function
     | Element ("Record_Item", args, [x]) ->
        let label = List.assoc "label" args |> label_name in
        let c = parse_exp x in
        failwith "TODO records"
     | x -> parse_fail x
-  in
+  in *)
   function
   | Element ("Unary_Exp", args, [x]) ->
      let op = List.assoc "op" args |> unary_op in
@@ -361,7 +361,7 @@ and parse_exp =
      let t = o |> int_of_string in
      let nary_op =
        function
-       | "[" -> fun l -> failwith "TODO sequence"
+       | "[" -> fun _ -> failwith "TODO sequence"
        | "{" -> fun l ->
                 begin
                   try
@@ -392,11 +392,11 @@ and parse_exp =
      let t = List.assoc "typref" args |> int_of_string in
      let t = type_infos#get t in
      Term.t_app empty [] (Some t)
-  | Element ("EmptySeq", args, children) ->
+  | Element ("EmptySeq", args, _) ->
      let t = List.assoc "typref" args |> int_of_string in
      let t = type_infos#get t in
      Term.t_app empty [] (Some t)
-  | Element ("Id", args, children) ->
+  | Element ("Id", args, _) ->
      begin
        let o = List.assoc "typref" args in
        let t = o |> int_of_string in
@@ -408,7 +408,7 @@ and parse_exp =
        (* with
          _ -> failwith (name ^ "???") *)
      end
-  | Element ("Integer_Literal", args, children) ->
+  | Element ("Integer_Literal", args, _) ->
      let v = List.assoc "value" args in
      Term.t_int_const (BigInt.of_string v)
   | Element ("Quantified_Exp", args, [Element ("Variables", _, children);Element ("Pred", _, [p]);Element ("Body", _, [b])]) ->
@@ -454,22 +454,22 @@ and parse_exp =
        with
          _ -> failwith "quantified set"
      end
-  | Element ("STRING_Literal", args, children) ->
+  | Element ("STRING_Literal", args, _) ->
      let v = List.assoc "value" args in
      Term.t_string_const v
-  | Element ("Struct", args, children) ->
+  | Element ("Struct", _, _) ->
      failwith "TODO struct"
-  | Element ("Record", args, children) ->
+  | Element ("Record", _, _) ->
      failwith "TODO record"
-  | Element ("Real_Literal", args, children) ->
-     let v = "{| " ^ List.assoc "value" args ^ " |}" in
+  | Element ("Real_Literal", args, _) ->
+     let _ = "{| " ^ List.assoc "value" args ^ " |}" in
      begin
        print_endline "Warning: reals are not fully supported. (TODO)";
        Term.t_real_const BigInt.zero
      end
-  | Element ("Record_Update", args, [x;y]) ->
+  | Element ("Record_Update", _, [_;_]) ->
      failwith "TODO record update"
-  | Element ("Record_Field_Access", args, [Element(_, args', _) as x]) ->
+  | Element ("Record_Field_Access", _, [Element(_, _, _)]) ->
      failwith "TODO record field access"
   | x -> parse_fail x
 
@@ -511,7 +511,7 @@ let parse_def name x =
            with
              Not_found -> failwith "set"
          end
-      | Element (_, args,_) as a ->
+      | Element (_, _,_) as a ->
          begin
            try
              let term = parse_pred a in
@@ -545,7 +545,7 @@ let parse_goal def hyp loc_hyp l =
     | Element ("Goal", _, [x]) :: _ ->
        parse_pred x
     | Element ("Proof_State", _, _) :: l -> foo l
-    | x :: l -> parse_fail x
+    | x :: _ -> parse_fail x
     | _ -> assert false
   in
   let name = Decl.create_prsymbol (Ident.id_fresh (goal_name ())) in
@@ -572,7 +572,7 @@ let add_po_table c co =
   let count = counter () in
   let pass =
     function
-    | Element("Tag", _, [Text(s)]) -> ()
+    | Element("Tag", _, [Text(_)]) -> ()
     | Element("Definition", args, []) ->
        Queue.add (List.assoc "name" args) def
     | Element("Hypothesis", _, [x]) ->
@@ -636,26 +636,26 @@ let get_all_goals x =
   let d = ref (-1) in
   let foo =
     function
-    | Element("Simple_Goal", _, l) -> d := !d + 1; [(!c,!d)]
+    | Element("Simple_Goal", _, _) -> d := !d + 1; [(!c,!d)]
     | _ -> []
     in
   let bar =
     function
-    | Element ("Proof_Obligation", args, children) -> c := !c+1; d := -1; List.concat @@ List.map foo children
+    | Element ("Proof_Obligation", _, children) -> c := !c+1; d := -1; List.concat @@ List.map foo children
     | _ -> []
   in List.concat @@ List.map bar x
 
 (* choice is None for getting all the POs, or Some([(a1,b1);...;(an,bn)]) for goals a1:b1 ... an:bn *)
-let rec parse_pog choice =
+let parse_pog choice =
   let co = counter () in
   let pass1 =
     function
     | Element("Define", args, children) ->
        let x = List.assoc "name" args in
        Hashtbl.add define_table x (lazy (parse_def (if x = "B definitions" then "b_def" else x) children))
-    | Element ("Proof_Obligation", args, children) ->
+    | Element ("Proof_Obligation", _, children) ->
        add_po_table children (string_of_int co#get)
-    | Element ("TypeInfos", args, children) -> parse_type_infos children
+    | Element ("TypeInfos", _, children) -> parse_type_infos children
     | _ -> ()
   in
   let pass2 l children =

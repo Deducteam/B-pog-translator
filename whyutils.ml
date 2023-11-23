@@ -1,7 +1,7 @@
 open Why3
 
-let config = Whyconf.init_config None
-let (config, env) = Whyconf.Args.complete_initialization ()
+(* let config = Whyconf.init_config None *)
+let (config, _) = Whyconf.Args.complete_initialization ()
 let main = Whyconf.get_main config
 let main = Whyconf.set_loadpath main ["."]
 let env = Env.create_env (Whyconf.loadpath main)
@@ -120,7 +120,7 @@ let natural1 = Theory.ns_find_ls interval_theory.Theory.th_export ["natural1"]
 let nat = Theory.ns_find_ls interval_theory.Theory.th_export ["nat"]
 let nat1 = Theory.ns_find_ls interval_theory.Theory.th_export ["nat1"]
 let interval = Theory.ns_find_ls interval_theory.Theory.th_export ["mk"]
-let apply = Theory.ns_find_ls function_theory.Theory.th_export ["apply"]
+(* let apply = Theory.ns_find_ls function_theory.Theory.th_export ["apply"] *)
 
 (* theory PowerSet *)
 
@@ -375,7 +375,7 @@ let binary_op =
 
 let ternary_op =
   function
-  | "son" -> failwith "TODO son"
+  | "son" -> fun _ _ _ -> failwith "TODO son"
   | "bin" -> failwith "TODO bin_ternary"
   | x -> failwith ("Invalid ternary expression : " ^ x)
 
@@ -387,8 +387,8 @@ let rec my_fold f o =
 
 let nary_op =
   function
-  | "[" -> fun x -> failwith "should not happen"
-  | "{" -> fun x -> failwith "should not happen"
+  | "[" -> fun _ -> failwith "should not happen"
+  | "{" -> fun _ -> failwith "should not happen"
   | "&" -> my_fold Term.t_and Term.t_true
   | "or" -> my_fold Term.t_or Term.t_false
   | x -> failwith ("Invalid n-ary expression : " ^ x)
