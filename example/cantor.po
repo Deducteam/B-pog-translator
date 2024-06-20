@@ -1,0 +1,21 @@
+THEORY ProofList IS
+_f(1) & _f(2) & WellDefinednessAssertions.2,(_f(3) & _f(6) & _f(7) & _f(8) => _f(10));
+_f(1) & _f(2) & WellDefinednessAssertions.1,(_f(3) & _f(6) & _f(7) & _f(8) => _f(9));
+_f(1) & _f(2) & AssertionLemmas.1,(_f(3) & _f(4) => _f(5))
+END
+&
+THEORY Formulas IS
+((NAT) = (((0) .. (2147483647)))) & ((INT) = (((-2147483647) .. (2147483647))));
+((xx) : (INTEGER));
+ff : INTEGER +-> POW(INTEGER) & dom(ff) = INTEGER & ((ff) : (((INTEGER) --> (POW(INTEGER)))));
+"Assertion is verified";
+#(pp).(!(nn).(((((pp) : (POW(INTEGER))) & ((nn) : (INTEGER))) => (not((((ff )(nn)) = (pp)))))));
+((pp) : (POW(INTEGER)));
+((nn) : (INTEGER));
+"Assertion is well defined";
+((nn) : (dom(ff)));
+((ff) : (((dom(ff)) +-> (ran(ff)))))
+END
+&
+THEORY EnumerateX
+END

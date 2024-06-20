@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Proof_Obligations xmlns="https://www.atelierb.eu/Formats/pog" version="1.0">
+    <Define name="B definitions" hash="17219133420564441872">
+        <Exp_Comparison op="=">
+            <Id value="NAT" typref="0"/>
+            <Binary_Exp op=".." typref="0">
+                <Integer_Literal value="0" typref="1"/>
+                <Id value="MAXINT" typref="1"/>
+            </Binary_Exp>
+        </Exp_Comparison>
+        <Exp_Comparison op="=">
+            <Id value="INT" typref="0"/>
+            <Binary_Exp op=".." typref="0">
+                <Id value="MININT" typref="1"/>
+                <Id value="MAXINT" typref="1"/>
+            </Binary_Exp>
+        </Exp_Comparison>
+    </Define>
+    <Define name="ctx" hash="0"/>
+    <Define name="seext" hash="0"/>
+    <Define name="lprp" hash="8848007541784858686">
+        <Exp_Comparison op=":">
+            <Id value="xx" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:2:1:1"/>
+            <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:2:1:2"/>
+        </Exp_Comparison>
+    </Define>
+    <Define name="inprp" hash="0"/>
+    <Define name="inext" hash="0"/>
+    <Define name="inv" hash="0"/>
+    <Define name="ass" hash="7333064412151882523">
+        <Quantified_Pred type="!">
+            <Variables>
+                <Id value="ff" typref="2"/>
+            </Variables>
+            <Body>
+                <Binary_Pred op="=&gt;">
+                    <Exp_Comparison op=":">
+                        <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:1"/>
+                        <Binary_Exp op="--&gt;" typref="3">
+                            <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:1"/>
+                            <Unary_Exp op="POW" typref="4">
+                                <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:2:1"/>
+                            </Unary_Exp>
+                        </Binary_Exp>
+                    </Exp_Comparison>
+                    <Quantified_Pred type="#">
+                        <Variables>
+                            <Id value="pp" typref="0"/>
+                        </Variables>
+                        <Body>
+                            <Quantified_Pred type="!">
+                                <Variables>
+                                    <Id value="nn" typref="1"/>
+                                </Variables>
+                                <Body>
+                                    <Binary_Pred op="=&gt;">
+                                        <Nary_Pred op="&amp;">
+                                            <Exp_Comparison op=":">
+                                                <Id value="pp" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:1"/>
+                                                <Unary_Exp op="POW" typref="4">
+                                                    <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:2:1"/>
+                                                </Unary_Exp>
+                                            </Exp_Comparison>
+                                            <Exp_Comparison op=":">
+                                                <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:1"/>
+                                                <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:2"/>
+                                            </Exp_Comparison>
+                                        </Nary_Pred>
+                                        <Unary_Pred op="not">
+                                            <Exp_Comparison op="=">
+                                                <Binary_Exp op="(" typref="0">
+                                                    <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                                                    <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:2"/>
+                                                </Binary_Exp>
+                                                <Id value="pp" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:2"/>
+                                            </Exp_Comparison>
+                                        </Unary_Pred>
+                                    </Binary_Pred>
+                                </Body>
+                            </Quantified_Pred>
+                        </Body>
+                    </Quantified_Pred>
+                </Binary_Pred>
+            </Body>
+        </Quantified_Pred>
+    </Define>
+    <Define name="cst" hash="0"/>
+    <Define name="sets" hash="0"/>
+    <Proof_Obligation goalHash="14200264843510558037">
+        <Tag>AssertionLemmas</Tag>
+        <Definition name="B definitions"/>
+        <Definition name="ctx"/>
+        <Definition name="cst"/>
+        <Definition name="lprp"/>
+        <Definition name="inprp"/>
+        <Definition name="inext"/>
+        <Definition name="seext"/>
+        <Definition name="inv"/>
+        <Local_Hyp num="1">
+            <Exp_Comparison op=":">
+                <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:1"/>
+                <Binary_Exp op="--&gt;" typref="3">
+                    <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:1"/>
+                    <Unary_Exp op="POW" typref="4">
+                        <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:2:1"/>
+                    </Unary_Exp>
+                </Binary_Exp>
+            </Exp_Comparison>
+        </Local_Hyp>
+        <Simple_Goal>
+            <Tag>Assertion is verified</Tag>
+            <Ref_Hyp num="1"/>
+            <Goal>
+                <Quantified_Pred type="#">
+                    <Variables>
+                        <Id value="pp" typref="0"/>
+                    </Variables>
+                    <Body>
+                        <Quantified_Pred type="!">
+                            <Variables>
+                                <Id value="nn" typref="1"/>
+                            </Variables>
+                            <Body>
+                                <Binary_Pred op="=&gt;">
+                                    <Nary_Pred op="&amp;">
+                                        <Exp_Comparison op=":">
+                                            <Id value="pp" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:1"/>
+                                            <Unary_Exp op="POW" typref="4">
+                                                <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:2:1"/>
+                                            </Unary_Exp>
+                                        </Exp_Comparison>
+                                        <Exp_Comparison op=":">
+                                            <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:1"/>
+                                            <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:2"/>
+                                        </Exp_Comparison>
+                                    </Nary_Pred>
+                                    <Unary_Pred op="not">
+                                        <Exp_Comparison op="=">
+                                            <Binary_Exp op="(" typref="0">
+                                                <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                                                <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:2"/>
+                                            </Binary_Exp>
+                                            <Id value="pp" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:2"/>
+                                        </Exp_Comparison>
+                                    </Unary_Pred>
+                                </Binary_Pred>
+                            </Body>
+                        </Quantified_Pred>
+                    </Body>
+                </Quantified_Pred>
+            </Goal>
+        </Simple_Goal>
+    </Proof_Obligation>
+    <Proof_Obligation goalHash="7333064412151882523">
+        <Tag>WellDefinednessAssertions</Tag>
+        <Definition name="B definitions"/>
+        <Definition name="ctx"/>
+        <Definition name="cst"/>
+        <Definition name="lprp"/>
+        <Definition name="inprp"/>
+        <Definition name="inext"/>
+        <Definition name="seext"/>
+        <Definition name="inv"/>
+        <Local_Hyp num="1">
+            <Exp_Comparison op=":">
+                <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:1"/>
+                <Binary_Exp op="--&gt;" typref="3">
+                    <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:1"/>
+                    <Unary_Exp op="POW" typref="4">
+                        <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:1:2:2:1"/>
+                    </Unary_Exp>
+                </Binary_Exp>
+            </Exp_Comparison>
+        </Local_Hyp>
+        <Local_Hyp num="2">
+            <Exp_Comparison op=":">
+                <Id value="pp" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:1"/>
+                <Unary_Exp op="POW" typref="4">
+                    <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:1:2:1"/>
+                </Unary_Exp>
+            </Exp_Comparison>
+        </Local_Hyp>
+        <Local_Hyp num="3">
+            <Exp_Comparison op=":">
+                <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:1"/>
+                <Id value="INTEGER" typref="0" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:1:2:2"/>
+            </Exp_Comparison>
+        </Local_Hyp>
+        <Simple_Goal>
+            <Tag>Assertion is well defined</Tag>
+            <Ref_Hyp num="1"/>
+            <Ref_Hyp num="2"/>
+            <Ref_Hyp num="3"/>
+            <Goal>
+                <Exp_Comparison op=":">
+                    <Id value="nn" typref="1" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:2"/>
+                    <Unary_Exp op="dom" typref="0">
+                        <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                    </Unary_Exp>
+                </Exp_Comparison>
+            </Goal>
+        </Simple_Goal>
+        <Simple_Goal>
+            <Tag>Assertion is well defined</Tag>
+            <Ref_Hyp num="1"/>
+            <Ref_Hyp num="2"/>
+            <Ref_Hyp num="3"/>
+            <Goal>
+                <Exp_Comparison op=":">
+                    <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                    <Binary_Exp op="+-&gt;" typref="3">
+                        <Unary_Exp op="dom" typref="0">
+                            <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                        </Unary_Exp>
+                        <Unary_Exp op="ran" typref="4">
+                            <Id value="ff" typref="2" tag="/home/claude/AtelierB/test/bdp/cantor.bxml:1:4:1:2:1:2:2:1:2:1:2:1:1"/>
+                        </Unary_Exp>
+                    </Binary_Exp>
+                </Exp_Comparison>
+            </Goal>
+        </Simple_Goal>
+    </Proof_Obligation>
+    <TypeInfos>
+        <Type id="0">
+            <Unary_Exp op="POW">
+                <Id value="INTEGER"/>
+            </Unary_Exp>
+        </Type>
+        <Type id="1">
+            <Id value="INTEGER"/>
+        </Type>
+        <Type id="2">
+            <Unary_Exp op="POW">
+                <Binary_Exp op="*">
+                    <Id value="INTEGER"/>
+                    <Unary_Exp op="POW">
+                        <Id value="INTEGER"/>
+                    </Unary_Exp>
+                </Binary_Exp>
+            </Unary_Exp>
+        </Type>
+        <Type id="3">
+            <Unary_Exp op="POW">
+                <Unary_Exp op="POW">
+                    <Binary_Exp op="*">
+                        <Id value="INTEGER"/>
+                        <Unary_Exp op="POW">
+                            <Id value="INTEGER"/>
+                        </Unary_Exp>
+                    </Binary_Exp>
+                </Unary_Exp>
+            </Unary_Exp>
+        </Type>
+        <Type id="4">
+            <Unary_Exp op="POW">
+                <Unary_Exp op="POW">
+                    <Id value="INTEGER"/>
+                </Unary_Exp>
+            </Unary_Exp>
+        </Type>
+    </TypeInfos>
+</Proof_Obligations>
