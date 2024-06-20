@@ -72,7 +72,7 @@ let handle =
 
 let comm n = List.iter (fun x -> print_int n; print_string "/"; print_endline x; handle (command (to_com n x))) (poglist n)
 
-let () = List.iter comm (seq 32 35) (* (seq 0 35) *)
+let () = List.iter comm (seq 0 35)
 
 let problems = ["0009/00230"; "0015/00310"; "0015/00312"; "0015/00314"; "0015/00318"; "0015/00320"; "0015/00322"; "0015/00325"; "0015/00327"; "0015/00329"; "0015/00333"; "0015/00335"; "0015/00337"; "0015/00339"; "0015/00341"; "0015/00343"; "0015/00347"; "0015/00349"; "0015/00353"; "0015/00355"; "0015/00357"; "0015/00359"; "0015/00363"; "0015/00365"; "0015/00367"; "0016/00917"; "0016/00919"; "0016/00921"; "0016/00923"; "0016/00926"; "0016/00928"; "0016/00930"; "0016/00938"; "0016/00940"; "0016/00942"; "0016/00944"; "0016/00946"; "0016/00950"; "0016/00952"; "0016/00954"; "0016/00956"; "0016/00958"; "0016/00960"; "0016/00962"; "0016/00964"; "0016/00966"; "0016/00969"]
 
@@ -82,6 +82,6 @@ let to_com f = "lambdapi check -c " ^ f
 
 let comm n = Sys.readdir (dest n) |> Array.to_list |> List.sort String.compare |> List.iter (fun x -> Sys.readdir (dest n ^ x) |> Array.to_list |> List.filter @@ String.ends_with ~suffix:".lp" |> List.iter (fun y -> handle (command (to_com (dest n ^ x ^ "/" ^ y)))))
 
-let () = List.iter comm (seq 32 35) (* (seq 0 35) *)
+let () = () (* List.iter comm (seq 0 35) *)
 
 let () = ()
