@@ -1,5 +1,5 @@
-# B-pog-translator
-Translate a POG file into a lambdapi file
+# pog2why
+Prove a proof obligation in POG format using Why3.
 
 # Requirements
 - ocaml version>4.14
